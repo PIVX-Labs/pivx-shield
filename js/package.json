@@ -1,0 +1,14 @@
+{
+  "name": "pivx-shielding-js",
+  "version": "1.0.0",
+  "description": "",
+  "main": "pivx_shielding.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "pivx-shielding": "file:../pkg/"
+  },
+  "author": "",
+  "license": "ISC"
+}
