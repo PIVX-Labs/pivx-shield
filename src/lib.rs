@@ -98,6 +98,22 @@ pub fn generate_next_shielding_payment_address(
     }
 }
 
+fn handle_block(
+    tree: &mut CommitmentTree<Node>,
+    block_data: String,
+    key: &UnifiedFullViewingKey,
+    isTestnet: bool,
+) -> Vec<(Note, MerklePath<Node>)>{
+    let block_json: serde_json::Value = serde_json::from_str(block_data.trim()).unwrap();
+    let mut notes = vec![];
+    for tx in block_json.get("tx").unwrap().as_array().unwrap() {
+        let hex = tx.get("hex").unwrap().as_str().unwrap();
+        notes.append(&mut add_tx_to_tree(tree, hex, &key, isTestnet).unwrap());
+    }
+    return notes;
+}
+
+//add a tx to a given commitment tree and the return a witness to each output TODO: add a witness to each input as well
 fn add_tx_to_tree(
     tree: &mut CommitmentTree<Node>,
     tx: &str,
