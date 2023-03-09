@@ -2,16 +2,24 @@ mod utils;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-use pivx_primitives::consensus::Parameters;
-use pivx_primitives::consensus::{MainNetwork, TestNetwork, MAIN_NETWORK, TEST_NETWORK};
+use std::path::Path;
+use std::process::Command;
+use std::{collections::HashMap, error::Error, io::Cursor};
+
+use pivx_primitives::consensus::{
+    BlockHeight, MainNetwork, Parameters, TestNetwork, MAIN_NETWORK, TEST_NETWORK,
+};
+use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
+use pivx_primitives::sapling::{note::Note, Node};
+use pivx_primitives::transaction::Transaction;
 use pivx_primitives::zip32::sapling::ExtendedSpendingKey;
 use pivx_primitives::zip32::AccountId;
 use pivx_primitives::zip32::DiversifierIndex;
 
+use pivx_client_backend::decrypt_transaction;
 use pivx_client_backend::encoding;
-use pivx_client_backend::keys::sapling; //::{decode_extended_spending_key, decode_transparent_address};
-                                        // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global
-                                        // allocator.
+use pivx_client_backend::keys::{sapling, UnifiedFullViewingKey}; //::{decode_extended_spending_key, decode_transparent_address};
+
 #[cfg(feature = "wee_alloc")]
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
@@ -88,6 +96,44 @@ pub fn generate_next_shielding_payment_address(
         }
         diversifier_index.increment();
     }
+}
+
+fn add_tx_to_tree(
+    tree: &mut CommitmentTree<Node>,
+    tx: &str,
+    key: &UnifiedFullViewingKey,
+    isTestnet: bool,
+) -> Result<Vec<(Note, MerklePath<Node>)>, Box<dyn Error>> {
+    let tx = Transaction::read(
+        Cursor::new(hex::decode(tx)?),
+        pivx_primitives::consensus::BranchId::Sapling,
+    )?;
+    let mut hash = HashMap::new();
+    hash.insert(AccountId::default(), key.clone());
+    let decrypted_tx = if isTestnet {
+        decrypt_transaction(&TEST_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
+    } else {
+        decrypt_transaction(&MAIN_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
+    };
+    let mut witnesses = vec![];
+
+    if let Some(sapling) = tx.sapling_bundle() {
+        for (i, out) in sapling.shielded_outputs().iter().enumerate() {
+            println!("note found!");
+            tree.append(Node::from_cmu(out.cmu()))
+                .map_err(|_| "Failed to add cmu to tree")?;
+            for note in &decrypted_tx {
+                if note.index == i {
+                    // Save witness
+                    let witness = IncrementalWitness::from_tree(tree)
+                        .path()
+                        .expect("Note not found??");
+                    witnesses.push((note.note.clone(), witness));
+                }
+            }
+        }
+    }
+    Ok(witnesses)
 }
 
 #[wasm_bindgen]
