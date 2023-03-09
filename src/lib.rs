@@ -4,13 +4,9 @@ mod utils;
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-use std::path::Path;
-use std::process::Command;
 use std::{collections::HashMap, error::Error, io::Cursor};
 
-use pivx_primitives::consensus::{
-    BlockHeight, MainNetwork, Parameters, TestNetwork, MAIN_NETWORK, TEST_NETWORK,
-};
+use pivx_primitives::consensus::{BlockHeight, Parameters, MAIN_NETWORK, TEST_NETWORK};
 use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
 use pivx_primitives::sapling::{note::Note, Node};
 use pivx_primitives::transaction::Transaction;
@@ -20,7 +16,7 @@ use pivx_primitives::zip32::DiversifierIndex;
 
 use pivx_client_backend::decrypt_transaction;
 use pivx_client_backend::encoding;
-use pivx_client_backend::keys::{sapling, UnifiedFullViewingKey}; //::{decode_extended_spending_key, decode_transparent_address};
+use pivx_client_backend::keys::{sapling, UnifiedFullViewingKey};
 
 #[cfg(feature = "wee_alloc")]
 #[global_allocator]
@@ -63,11 +59,11 @@ pub fn generate_extended_spending_key_from_seed(val: JsValue) -> JsValue {
 pub fn generate_next_shielding_payment_address(
     val: JsValue,
     n_address: i32,
-    isTestnet: bool,
+    is_testnet: bool,
 ) -> JsValue {
     let enc_extsk: String = serde_wasm_bindgen::from_value(val)
         .expect("Cannot deserialize the encoded extended full viewing key");
-    let enc_str: &str = if isTestnet {
+    let enc_str: &str = if is_testnet {
         TEST_NETWORK.hrp_sapling_extended_spending_key()
     } else {
         MAIN_NETWORK.hrp_sapling_extended_spending_key()
@@ -84,7 +80,7 @@ pub fn generate_next_shielding_payment_address(
         if let Some(payment_address) = payment_address {
             found_addresses += 1;
             if found_addresses == n_address {
-                let enc_str: &str = if isTestnet {
+                let enc_str: &str = if is_testnet {
                     TEST_NETWORK.hrp_sapling_payment_address()
                 } else {
                     MAIN_NETWORK.hrp_sapling_payment_address()
@@ -102,17 +98,17 @@ pub fn generate_next_shielding_payment_address(
 
 fn handle_block(
     tree: &mut CommitmentTree<Node>,
-    block_data: String,
+    block_data: &str,
     key: &UnifiedFullViewingKey,
-    isTestnet: bool,
-) -> Vec<(Note, MerklePath<Node>)> {
+    is_testnet: bool,
+) -> Result<Vec<(Note, MerklePath<Node>)>, Box<dyn Error>> {
     let block_json: serde_json::Value = serde_json::from_str(block_data.trim()).unwrap();
     let mut notes = vec![];
     for tx in block_json.get("tx").unwrap().as_array().unwrap() {
         let hex = tx.get("hex").unwrap().as_str().unwrap();
-        notes.append(&mut add_tx_to_tree(tree, hex, &key, isTestnet).unwrap());
+        notes.append(&mut add_tx_to_tree(tree, hex, &key, is_testnet).unwrap());
     }
-    return notes;
+    return Ok(notes);
 }
 
 //add a tx to a given commitment tree and the return a witness to each output TODO: add a witness to each input as well
@@ -120,7 +116,7 @@ fn add_tx_to_tree(
     tree: &mut CommitmentTree<Node>,
     tx: &str,
     key: &UnifiedFullViewingKey,
-    isTestnet: bool,
+    is_testnet: bool,
 ) -> Result<Vec<(Note, MerklePath<Node>)>, Box<dyn Error>> {
     let tx = Transaction::read(
         Cursor::new(hex::decode(tx)?),
@@ -128,7 +124,7 @@ fn add_tx_to_tree(
     )?;
     let mut hash = HashMap::new();
     hash.insert(AccountId::default(), key.clone());
-    let decrypted_tx = if isTestnet {
+    let decrypted_tx = if is_testnet {
         decrypt_transaction(&TEST_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
     } else {
         decrypt_transaction(&MAIN_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
@@ -179,12 +175,11 @@ mod test {
             .expect("Failed to create key");
         let comp_note = add_tx_to_tree(&mut tree, tx, &key, true).unwrap();
         //Successfully decrypt exactly 1 note
-        assert_eq!(comp_note.len(), 1); 
+        assert_eq!(comp_note.len(), 1);
         let note = &comp_note[0].0;
         //Successfully decrypt the balance
-        assert_eq!(note.value().inner(), 1000000000); 
+        assert_eq!(note.value().inner(), 1000000000);
         //Successfully decrypt the payment address
         assert_eq!(encoding::encode_payment_address(TEST_NETWORK.hrp_sapling_payment_address(),&note.recipient()),"ptestsapling1nkwhh4umfnze4u6wz4fgdy7hfrgp6hn7efc75xwwau6qdmmd79epgqmc9dqc58j7sffmy0lzhe7");
-        
     }
 }
