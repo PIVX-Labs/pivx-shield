@@ -7,14 +7,14 @@ export default class PIVXShielding {
    * @param {Number} accountIndex - index of the account that you want to generate, by default is set to 0
    */
   static async createFromSeed(seed, blockHeight, coinType, accountIndex = 0) {
-    let shieldMan = await import("pivx-shielding");
-    let serData = {
+    const shieldMan = await import("pivx-shielding");
+    const serData = {
       seed: seed,
       coin_type: coinType,
       account_index: accountIndex,
     };
-    let extsk = shieldMan.generate_extended_spending_key_from_seed(serData);
-    let isTestNet = coinType == 1 ? true : false;
+    const extsk = shieldMan.generate_extended_spending_key_from_seed(serData);
+    const isTestNet = coinType == 1 ? true : false;
     return new PIVXShielding(shieldMan, extsk, isTestNet);
   }
 
@@ -52,7 +52,7 @@ export default class PIVXShielding {
    * @returns {string} new shielded address
    */
   getNewAddress() {
-    let address = this.shieldMan.generate_next_shielding_payment_address(
+    const address = this.shieldMan.generate_next_shielding_payment_address(
       this.extsk,
       this.generatedAddresses + 1,
       this.isTestNet
