@@ -1,4 +1,6 @@
+mod checkpoint;
 mod utils;
+
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
@@ -103,7 +105,7 @@ fn handle_block(
     block_data: String,
     key: &UnifiedFullViewingKey,
     isTestnet: bool,
-) -> Vec<(Note, MerklePath<Node>)>{
+) -> Vec<(Note, MerklePath<Node>)> {
     let block_json: serde_json::Value = serde_json::from_str(block_data.trim()).unwrap();
     let mut notes = vec![];
     for tx in block_json.get("tx").unwrap().as_array().unwrap() {
