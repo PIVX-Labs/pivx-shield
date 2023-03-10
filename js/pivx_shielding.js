@@ -42,6 +42,15 @@ export default class PIVXShielding {
   }
 
   /**
+   * Loop through the txs of a block and update useful shield data
+   * @param {JSON} blockJson - Json of the block outputted from any PIVX node
+   */
+  handleBlock(blockJson) {
+    for (let tx of blockJson.tx) {
+      this.addTransaction(tx.hex);
+    }
+  }
+  /**
    * Adds a transaction to the tree. Decrypts notes and stores nullifiers
    * @param {String} hex - transaction hex
    */

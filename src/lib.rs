@@ -160,23 +160,6 @@ pub fn handle_transaction(
     return serde_wasm_bindgen::to_value(&res).expect("Cannot serialize tx output");
 }
 
-//TODO: move this function to the js end?
-/*
-fn handle_block(
-    tree: &mut CommitmentTree<Node>,
-    block_data: &str,
-    key: &UnifiedFullViewingKey,
-    is_testnet: bool,
-) -> Result<Vec<(Note, IncrementalWitness<Node>)>, Box<dyn Error>> {
-    let block_json: serde_json::Value = serde_json::from_str(block_data.trim()).unwrap();
-    let mut notes = vec![];
-    for tx in block_json.get("tx").unwrap().as_array().unwrap() {
-        let hex = tx.get("hex").unwrap().as_str().unwrap();
-        notes.append(&mut handle_transaction_internal(tree, hex, &key, is_testnet).unwrap());
-    }
-    return Ok(notes);
-}
-*/
 //add a tx to a given commitment tree and the return a witness to each output
 pub fn handle_transaction_internal(
     tree: &mut CommitmentTree<Node>,
