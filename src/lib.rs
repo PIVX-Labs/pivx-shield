@@ -36,7 +36,7 @@ pub struct JSExtendedSpendingKeySerData {
     pub account_index: u32,
 }
 
-#[derive(Serialize, Deserialize)] //TODO: find a smart way to serialize and deserialize a MerklePath<Node>
+#[derive(Serialize, Deserialize)]
 pub struct JSTxSaplingData {
     pub decrypted_notes: Vec<(Note, String)>,
     pub nullifiers: Vec<String>,
@@ -112,7 +112,6 @@ pub fn get_closest_checkpoint(block_height: i32, is_testnet: bool) -> JsValue {
 //Input a tx and return: the updated commitment merkletree, all the nullifier found in the tx and all the node decoded with the corresponding witness
 #[wasm_bindgen]
 pub fn handle_transaction(
-    //TODO: THIS IS NOT FINISHED
     tree_hex: String,
     tx: String,
     enc_extsk: String,
@@ -178,7 +177,7 @@ fn handle_block(
     return Ok(notes);
 }
 */
-//add a tx to a given commitment tree and the return a witness to each output TODO: add a witness to each input as well
+//add a tx to a given commitment tree and the return a witness to each output
 pub fn handle_transaction_internal(
     tree: &mut CommitmentTree<Node>,
     tx: &str,
