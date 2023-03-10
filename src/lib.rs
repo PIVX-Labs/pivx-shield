@@ -4,13 +4,12 @@ mod utils;
 use crate::checkpoint::get_checkpoint;
 
 use serde::{Deserialize, Serialize};
-use wasm_bindgen::prelude::*;
-
 use std::{collections::HashMap, error::Error, io::Cursor};
+use wasm_bindgen::prelude::*;
 
 use pivx_primitives::consensus::{BlockHeight, Parameters, MAIN_NETWORK, TEST_NETWORK};
 use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
-use pivx_primitives::sapling::{note::Note, Node};
+use pivx_primitives::sapling::{note::Note, Node, Nullifier};
 use pivx_primitives::transaction::Transaction;
 use pivx_primitives::zip32::sapling::ExtendedSpendingKey;
 use pivx_primitives::zip32::AccountId;
@@ -37,10 +36,12 @@ pub struct JSExtendedSpendingKeySerData {
     pub account_index: u32,
 }
 
-//#[derive(Serialize, Deserialize)] //TODO: find a smart way to serialize and deserialize a Note
-//pub struct JSTxSaplingData {
-//    pub data: Vec<(Note, MerklePath<Node>)>,
-//}
+//#[derive(Serialize, Deserialize)] //TODO: find a smart way to serialize and deserialize a MerklePath<Node>
+pub struct JSTxSaplingData {
+    pub decrypted_notes: Vec<(Note, MerklePath<Node>)>,
+    pub nullifier: Vec<Nullifier>,
+    pub commitment_tree: String, 
+}
 
 //Generate an extended spending key given a seed, coin type and account index
 #[wasm_bindgen]
@@ -201,12 +202,16 @@ pub fn greet() {
 #[cfg(test)]
 mod test {
     use crate::handle_transaction_internal;
+    use jubjub::Fr;
     use pivx_client_backend::encoding;
     use pivx_client_backend::keys::UnifiedFullViewingKey;
     use pivx_primitives::consensus::Parameters;
     use pivx_primitives::consensus::TEST_NETWORK;
     use pivx_primitives::merkle_tree::CommitmentTree;
+    use pivx_primitives::sapling::value::NoteValue;
     use pivx_primitives::sapling::Node;
+    use pivx_primitives::sapling::Note;
+    use pivx_primitives::sapling::Rseed::BeforeZip212;
     #[test]
     fn check_tx_decryption() {
         let mut tree = CommitmentTree::<Node>::empty();
@@ -224,5 +229,25 @@ mod test {
         assert_eq!(note.value().inner(), 1000000000);
         //Successfully decrypt the payment address
         assert_eq!(encoding::encode_payment_address(TEST_NETWORK.hrp_sapling_payment_address(),&note.recipient()),"ptestsapling1nkwhh4umfnze4u6wz4fgdy7hfrgp6hn7efc75xwwau6qdmmd79epgqmc9dqc58j7sffmy0lzhe7");
+    }
+
+    #[test]
+    pub fn test2() {
+        let skey = encoding::decode_extended_spending_key( "p-secret-spending-key-test", "p-secret-spending-key-test1qd7a5dwjqqqqpqyzy3xs3usw7rzal27gvx6szvt56qff69ceqxtzdst9cuvut3n7dcp28wk2why35qd3989hdvf5wq9m62q6xfrmnlkf0r70v2s7x63sr2zzt8shr6psry8sq66kvzwskrghutgd7wmqknsljq0j0t2kmyg8xzqweug0pg40ml0s8mvvmgmp9c9pdvmpnx9gnhwde9yrg4f2c36c808d6p29ywevmn47lp9elyawr93wxl96ttd5pevj6f68qc6rcps5u9990").expect("Cannot decode spending key");
+
+        let test_ser = Note::from_parts(
+            skey.default_address().1,
+            NoteValue::from_raw(10),
+            BeforeZip212(Fr::one()),
+        );
+        let ser = serde_json::to_value(&test_ser).expect("Cannot serialize note");
+        let test_deser: Note = serde_json::from_value(ser).expect("Cannot deserialize note");
+        assert_eq!(test_deser.value(), test_ser.value());
+        assert_eq!(test_deser.recipient(), test_ser.recipient());
+        if let BeforeZip212(rseed) = test_deser.rseed() {
+            assert_eq!(rseed, &Fr::one());
+        } else {
+            panic!();
+        }
     }
 }
