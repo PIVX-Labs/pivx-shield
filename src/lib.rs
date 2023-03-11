@@ -51,7 +51,7 @@ fn decode_extsk(enc_extsk: &str, is_testnet: bool) -> ExtendedSpendingKey {
     } else {
         MAIN_NETWORK.hrp_sapling_extended_spending_key()
     };
-    let enc_str: &str = "p-secret-spending-key-test"; // ONLY FOR TESTING
+
     return encoding::decode_extended_spending_key(enc_str, enc_extsk).expect("Cannot decde extsk");
 }
 
@@ -61,7 +61,7 @@ fn encode_extsk(extsk: &ExtendedSpendingKey, is_testnet: bool) -> String {
     } else {
         MAIN_NETWORK.hrp_sapling_extended_spending_key()
     };
-    let enc_str: &str = "p-secret-spending-key-test"; // ONLY FOR TESTING
+
     return encoding::encode_extended_spending_key(enc_str, extsk);
 }
 
