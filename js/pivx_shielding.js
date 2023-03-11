@@ -15,29 +15,76 @@ export default class PIVXShielding {
     };
     const extsk = shieldMan.generate_extended_spending_key_from_seed(serData);
     const isTestNet = coinType == 1 ? true : false;
-    return new PIVXShielding(shieldMan, extsk, isTestNet);
+    const [effectiveHeight, commitmentTree] = shieldMan.get_closest_checkpoint(
+      blockHeight,
+      isTestNet
+    );
+
+    return new PIVXShielding(
+      shieldMan,
+      extsk,
+      isTestNet,
+      effectiveHeight,
+      commitmentTree
+    );
   }
 
-  constructor(shieldMan, extsk, isTestNet) {
+  constructor(shieldMan, extsk, isTestNet, blockHeight, commitmentTree) {
     this.shieldMan = shieldMan;
     this.extsk = extsk;
     this.generatedAddresses = 0;
     this.isTestNet = isTestNet;
+    this.lastBlock = blockHeight;
+    this.commitmentTree = commitmentTree;
+    this.unspentNotes = [];
   }
 
+  /**
+   * Loop through the txs of a block and update useful shield data
+   * @param {JSON} blockJson - Json of the block outputted from any PIVX node
+   */
+  handleBlock(blockJson) {
+    for (const tx of blockJson.tx) {
+      this.addTransaction(tx.hex);
+    }
+  }
   /**
    * Adds a transaction to the tree. Decrypts notes and stores nullifiers
    * @param {String} hex - transaction hex
    */
   addTransaction(hex) {
-    throw new Error("Not implemented");
+    const res = this.shieldMan.handle_transaction(
+      this.commitmentTree,
+      hex,
+      this.extsk,
+      this.isTestNet
+    );
+    this.commitmentTree = res.commitment_tree;
+    for (const x of res.decrypted_notes) {
+      this.unspentNotes.push(x);
+    }
+    if (res.nullifiers.length > 0) {
+      this.removeSpentNotes(res.nullifiers);
+    }
   }
 
+  /**
+   * Remove the Shield Notes that match the nullifiers given in input
+   * @param {Array<String>} blockJson - Array of nullifiers
+   */
+  removeSpentNotes(nullifiers) {
+    this.unspentNotes = this.shieldMan.remove_spent_notes(
+      this.unspentNotes,
+      nullifiers,
+      this.extsk,
+      this.isTestNet
+    );
+  }
   /**
    * Return number of shielded satoshis of the account
    */
   getBalance() {
-    throw new Error("Not implemented");
+    return this.unspentNotes.reduce((acc, [note]) => acc + note.value, 0);
   }
 
   /**
