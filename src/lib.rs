@@ -18,6 +18,8 @@ use pivx_primitives::zip32::DiversifierIndex;
 use pivx_client_backend::decrypt_transaction;
 use pivx_client_backend::encoding;
 use pivx_client_backend::keys::{sapling, UnifiedFullViewingKey};
+use pivx_primitives::sapling::PaymentAddress;
+use pivx_primitives::zip32::Scope;
 
 #[cfg(feature = "wee_alloc")]
 #[global_allocator]
@@ -43,6 +45,35 @@ pub struct JSTxSaplingData {
     pub commitment_tree: String,
 }
 
+fn decode_extsk(enc_extsk: &str, is_testnet: bool) -> ExtendedSpendingKey {
+    let enc_str: &str = if is_testnet {
+        TEST_NETWORK.hrp_sapling_extended_spending_key()
+    } else {
+        MAIN_NETWORK.hrp_sapling_extended_spending_key()
+    };
+    let enc_str: &str = "p-secret-spending-key-test"; // ONLY FOR TESTING
+    return encoding::decode_extended_spending_key(enc_str, enc_extsk).expect("Cannot decde extsk");
+}
+
+fn encode_extsk(extsk: &ExtendedSpendingKey, is_testnet: bool) -> String {
+    let enc_str: &str = if is_testnet {
+        TEST_NETWORK.hrp_sapling_extended_spending_key()
+    } else {
+        MAIN_NETWORK.hrp_sapling_extended_spending_key()
+    };
+    let enc_str: &str = "p-secret-spending-key-test"; // ONLY FOR TESTING
+    return encoding::encode_extended_spending_key(enc_str, extsk);
+}
+
+fn encode_payment_address(addr: &PaymentAddress, is_testnet: bool) -> String {
+    let enc_str: &str = if is_testnet {
+        TEST_NETWORK.hrp_sapling_payment_address()
+    } else {
+        MAIN_NETWORK.hrp_sapling_payment_address()
+    };
+    return encoding::encode_payment_address(enc_str, addr);
+}
+
 //Generate an extended spending key given a seed, coin type and account index
 #[wasm_bindgen]
 pub fn generate_extended_spending_key_from_seed(val: JsValue) -> JsValue {
@@ -53,12 +84,8 @@ pub fn generate_extended_spending_key_from_seed(val: JsValue) -> JsValue {
         data_arr.coin_type,
         AccountId::from(data_arr.account_index),
     );
-    let enc_str: &str = if data_arr.coin_type == 1 {
-        TEST_NETWORK.hrp_sapling_extended_spending_key()
-    } else {
-        MAIN_NETWORK.hrp_sapling_extended_spending_key()
-    };
-    return serde_wasm_bindgen::to_value(&encoding::encode_extended_spending_key(enc_str, &extsk))
+    let enc_extsk = encode_extsk(&extsk, data_arr.coin_type == 1);
+    return serde_wasm_bindgen::to_value(&enc_extsk)
         .expect("Cannot serialize extended spending key");
 }
 
@@ -69,14 +96,7 @@ pub fn generate_next_shielding_payment_address(
     n_address: i32,
     is_testnet: bool,
 ) -> JsValue {
-    let enc_str: &str = if is_testnet {
-        TEST_NETWORK.hrp_sapling_extended_spending_key()
-    } else {
-        MAIN_NETWORK.hrp_sapling_extended_spending_key()
-    };
-
-    let extsk = encoding::decode_extended_spending_key(&enc_str, &enc_extsk)
-        .expect("Cannot decode the extended spending key");
+    let extsk = decode_extsk(&enc_extsk, is_testnet);
     let mut found_addresses = 0;
     let mut diversifier_index = DiversifierIndex::new();
     loop {
@@ -86,16 +106,9 @@ pub fn generate_next_shielding_payment_address(
         if let Some(payment_address) = payment_address {
             found_addresses += 1;
             if found_addresses == n_address {
-                let enc_str: &str = if is_testnet {
-                    TEST_NETWORK.hrp_sapling_payment_address()
-                } else {
-                    MAIN_NETWORK.hrp_sapling_payment_address()
-                };
-                return serde_wasm_bindgen::to_value(&encoding::encode_payment_address(
-                    &enc_str,
-                    &payment_address.1,
-                ))
-                .expect("Cannot encode payment address");
+                let enc_addr = encode_payment_address(&payment_address.1, is_testnet);
+                return serde_wasm_bindgen::to_value(&enc_addr)
+                    .expect("Cannot serialize payment address");
             }
         }
         diversifier_index.increment();
@@ -120,19 +133,9 @@ pub fn handle_transaction(
     let buff =
         Cursor::new(hex::decode(tree_hex).expect("Cannot decode commitment tree from hexadecimal"));
     let mut tree = CommitmentTree::<Node>::read(buff).expect("Cannot decode commitment tree!");
-    let enc_str: &str = if is_testnet {
-        TEST_NETWORK.hrp_sapling_extended_spending_key()
-    } else {
-        MAIN_NETWORK.hrp_sapling_extended_spending_key()
-    };
-
-    let enc_str: &str = "p-secret-spending-key-test"; // ONLY FOR TESTING
-    let extsk = encoding::decode_extended_spending_key(&enc_str, &enc_extsk)
-        .expect("Cannot decode the extended spending key");
-
+    let extsk = decode_extsk(&enc_extsk, is_testnet);
     let key = UnifiedFullViewingKey::new(Some(extsk.to_diversifiable_full_viewing_key()), None)
         .expect("Failed to create key");
-
     let (nullifiers, comp_note) =
         handle_transaction_internal(&mut tree, &tx, &key, true).expect("Cannot decode tx");
     let mut ser_comp_note: Vec<(Note, String)> = vec![];
@@ -202,6 +205,38 @@ pub fn handle_transaction_internal(
 }
 
 #[wasm_bindgen]
+pub fn remove_unspent_notes(data: JsValue, enc_extsk: String, is_testnet: bool) -> JsValue {
+    let unser_data: JSTxSaplingData =
+        serde_wasm_bindgen::from_value(data).expect("Cannot serialize sapling data");
+    let hex_notes = unser_data.decrypted_notes;
+    let nullifiers = unser_data.nullifiers;
+    let mut notes: Vec<(Note, String, MerklePath<Node>)> = vec![];
+    let mut unspent_notes: Vec<(Note, String)> = vec![];
+
+    let extsk = decode_extsk(&enc_extsk, is_testnet);
+    let nullif_key = extsk
+        .to_diversifiable_full_viewing_key()
+        .to_nk(Scope::External);
+
+    for x in hex_notes.iter() {
+        let buff = Cursor::new(hex::decode(&x.1).expect("Cannot decode witness"));
+        let newNote = x.0.clone();
+        let path = IncrementalWitness::<Node>::read(buff)
+            .expect("Cannot read witness from buffer")
+            .path()
+            .expect("Cannot find witness path");
+        notes.push((newNote, x.1.clone(), path));
+    }
+    for x in notes.iter() {
+        let nf = hex::encode(x.0.nf(&nullif_key, x.2.position).0);
+        if nullifiers.iter().filter(|x| **x == nf).next() == None {
+            unspent_notes.push((x.0.clone(), x.1.clone()));
+        };
+    }
+    serde_wasm_bindgen::to_value(&unspent_notes).expect("Cannot serialize unspent notes")
+}
+
+#[wasm_bindgen]
 pub fn greet() {
     alert("Hello, pivx-shielding!");
 }
@@ -242,7 +277,7 @@ mod test {
     }
 
     #[test]
-    pub fn test2() {
+    pub fn check_note_serialization() {
         let skey = encoding::decode_extended_spending_key( "p-secret-spending-key-test", "p-secret-spending-key-test1qd7a5dwjqqqqpqyzy3xs3usw7rzal27gvx6szvt56qff69ceqxtzdst9cuvut3n7dcp28wk2why35qd3989hdvf5wq9m62q6xfrmnlkf0r70v2s7x63sr2zzt8shr6psry8sq66kvzwskrghutgd7wmqknsljq0j0t2kmyg8xzqweug0pg40ml0s8mvvmgmp9c9pdvmpnx9gnhwde9yrg4f2c36c808d6p29ywevmn47lp9elyawr93wxl96ttd5pevj6f68qc6rcps5u9990").expect("Cannot decode spending key");
 
         let test_ser = Note::from_parts(

@@ -78,6 +78,13 @@ export default class PIVXShielding {
   }
 
   /**
+   * Remove the Shield Notes that match the nullifiers given in input
+   * @param {Array<String>} blockJson - Array of nullifiers 
+   */
+  removeSpentNotes(nullifiers){
+    throw new Error("Not implemented");
+  }
+  /**
    * Return number of shielded satoshis of the account
    */
   getBalance() {
