@@ -52,7 +52,7 @@ fn decode_extsk(enc_extsk: &str, is_testnet: bool) -> ExtendedSpendingKey {
         MAIN_NETWORK.hrp_sapling_extended_spending_key()
     };
 
-    return encoding::decode_extended_spending_key(enc_str, enc_extsk).expect("Cannot decde extsk");
+    encoding::decode_extended_spending_key(enc_str, enc_extsk).expect("Cannot decde extsk")
 }
 
 fn encode_extsk(extsk: &ExtendedSpendingKey, is_testnet: bool) -> String {
@@ -62,7 +62,7 @@ fn encode_extsk(extsk: &ExtendedSpendingKey, is_testnet: bool) -> String {
         MAIN_NETWORK.hrp_sapling_extended_spending_key()
     };
 
-    return encoding::encode_extended_spending_key(enc_str, extsk);
+    encoding::encode_extended_spending_key(enc_str, extsk)
 }
 
 fn encode_payment_address(addr: &PaymentAddress, is_testnet: bool) -> String {
@@ -71,7 +71,7 @@ fn encode_payment_address(addr: &PaymentAddress, is_testnet: bool) -> String {
     } else {
         MAIN_NETWORK.hrp_sapling_payment_address()
     };
-    return encoding::encode_payment_address(enc_str, addr);
+    encoding::encode_payment_address(enc_str, addr)
 }
 
 //Generate an extended spending key given a seed, coin type and account index
@@ -85,8 +85,7 @@ pub fn generate_extended_spending_key_from_seed(val: JsValue) -> JsValue {
         AccountId::from(data_arr.account_index),
     );
     let enc_extsk = encode_extsk(&extsk, data_arr.coin_type == 1);
-    return serde_wasm_bindgen::to_value(&enc_extsk)
-        .expect("Cannot serialize extended spending key");
+    serde_wasm_bindgen::to_value(&enc_extsk).expect("Cannot serialize extended spending key")
 }
 
 //Generate the n_address-th valid payment address given the encoded extended full viewing key and a starting index
@@ -101,7 +100,7 @@ pub fn generate_next_shielding_payment_address(
     let mut diversifier_index = DiversifierIndex::new();
     loop {
         let payment_address = extsk
-            .to_extended_full_viewing_key()
+            .to_diversifiable_full_viewing_key()
             .find_address(diversifier_index);
         if let Some(payment_address) = payment_address {
             found_addresses += 1;
@@ -111,7 +110,9 @@ pub fn generate_next_shielding_payment_address(
                     .expect("Cannot serialize payment address");
             }
         }
-        diversifier_index.increment();
+        diversifier_index
+            .increment()
+            .expect("Failed to increment the index");
     }
 }
 
@@ -140,27 +141,27 @@ pub fn handle_transaction(
         handle_transaction_internal(&mut tree, &tx, &key, true).expect("Cannot decode tx");
     let mut ser_comp_note: Vec<(Note, String)> = vec![];
     let mut ser_nullifiers: Vec<String> = vec![];
-    for x in comp_note.iter() {
-        let mut buff = Cursor::new(Vec::new());
-        x.1.write(&mut buff)
+    for (note, witness) in comp_note.iter() {
+        let mut buff = Vec::new();
+        witness
+            .write(&mut buff)
             .expect("Cannot write witness to buffer");
-        let newNote = x.0.clone();
-        ser_comp_note.push((newNote, hex::encode(&buff.into_inner())));
+        ser_comp_note.push((note.clone(), hex::encode(&buff)));
     }
 
     for nullif in nullifiers.iter() {
         ser_nullifiers.push(hex::encode(nullif.0));
     }
 
-    let mut buff = Cursor::new(Vec::new());
+    let mut buff = Vec::new();
     tree.write(&mut buff).expect("Cannot write tree to buffer");
 
     let res: JSTxSaplingData = JSTxSaplingData {
         decrypted_notes: ser_comp_note,
         nullifiers: ser_nullifiers,
-        commitment_tree: hex::encode(buff.into_inner()),
+        commitment_tree: hex::encode(buff),
     };
-    return serde_wasm_bindgen::to_value(&res).expect("Cannot serialize tx output");
+    serde_wasm_bindgen::to_value(&res).expect("Cannot serialize tx output")
 }
 
 //add a tx to a given commitment tree and the return a witness to each output
@@ -205,7 +206,7 @@ pub fn handle_transaction_internal(
 }
 
 #[wasm_bindgen]
-pub fn remove_unspent_notes(
+pub fn remove_spent_notes(
     notes_data: JsValue,
     nullifiers_data: JsValue,
     enc_extsk: String,
@@ -223,19 +224,18 @@ pub fn remove_unspent_notes(
         .to_diversifiable_full_viewing_key()
         .to_nk(Scope::External);
 
-    for x in hex_notes.iter() {
-        let buff = Cursor::new(hex::decode(&x.1).expect("Cannot decode witness"));
-        let newNote = x.0.clone();
+    for (note, witness) in hex_notes.iter() {
+        let buff = Cursor::new(hex::decode(witness).expect("Cannot decode witness"));
         let path = IncrementalWitness::<Node>::read(buff)
             .expect("Cannot read witness from buffer")
             .path()
             .expect("Cannot find witness path");
-        notes.push((newNote, x.1.clone(), path));
+        notes.push((note.clone(), witness.clone(), path));
     }
-    for x in notes.iter() {
-        let nf = hex::encode(x.0.nf(&nullif_key, x.2.position).0);
-        if nullifiers.iter().filter(|x| **x == nf).next() == None {
-            unspent_notes.push((x.0.clone(), x.1.clone()));
+    for (note, witness, path) in notes.iter() {
+        let nf = hex::encode(note.nf(&nullif_key, path.position).0);
+        if nullifiers.iter().any(|x| **x == nf) {
+            unspent_notes.push((note.clone(), witness.clone()));
         };
     }
     serde_wasm_bindgen::to_value(&unspent_notes).expect("Cannot serialize unspent notes")

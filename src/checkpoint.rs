@@ -10,8 +10,7 @@ pub fn get_checkpoint(block_height: i32, is_testnet: bool) -> Option<(i32, &'sta
     return used_checkpoints
         .iter()
         .rev()
-        .filter(|x| x.0 < block_height)
-        .next()
+        .find(|x| x.0 < block_height)
         .copied();
 }
 

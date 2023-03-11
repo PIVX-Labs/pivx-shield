@@ -15,12 +15,11 @@ export default class PIVXShielding {
     };
     const extsk = shieldMan.generate_extended_spending_key_from_seed(serData);
     const isTestNet = coinType == 1 ? true : false;
-    const checkpointResult = shieldMan.get_closest_checkpoint(
+    const [effectiveHeight, commitmentTree] = shieldMan.get_closest_checkpoint(
       blockHeight,
       isTestNet
     );
-    const effectiveHeight = checkpointResult[0];
-    const commitmentTree = checkpointResult[1];
+
     return new PIVXShielding(
       shieldMan,
       extsk,
@@ -45,7 +44,7 @@ export default class PIVXShielding {
    * @param {JSON} blockJson - Json of the block outputted from any PIVX node
    */
   handleBlock(blockJson) {
-    for (let tx of blockJson.tx) {
+    for (const tx of blockJson.tx) {
       this.addTransaction(tx.hex);
     }
   }
@@ -54,14 +53,14 @@ export default class PIVXShielding {
    * @param {String} hex - transaction hex
    */
   addTransaction(hex) {
-    let res = this.shieldMan.handle_transaction(
+    const res = this.shieldMan.handle_transaction(
       this.commitmentTree,
       hex,
       this.extsk,
       this.isTestNet
     );
     this.commitmentTree = res.commitment_tree;
-    for (let x of res.decrypted_notes) {
+    for (const x of res.decrypted_notes) {
       this.unspentNotes.push(x);
     }
     if (res.nullifiers.length > 0) {
@@ -74,7 +73,7 @@ export default class PIVXShielding {
    * @param {Array<String>} blockJson - Array of nullifiers
    */
   removeSpentNotes(nullifiers) {
-    this.unspentNotes = this.shieldMan.remove_unspent_notes(
+    this.unspentNotes = this.shieldMan.remove_spent_notes(
       this.unspentNotes,
       nullifiers,
       this.extsk,
@@ -85,11 +84,7 @@ export default class PIVXShielding {
    * Return number of shielded satoshis of the account
    */
   getBalance() {
-    let tot = 0;
-    for (let x of this.unspentNotes) {
-      tot += x[0].value;
-    }
-    return tot;
+    return this.unspentNotes.reduce((acc, [note]) => acc + note.value, 0);
   }
 
   /**
