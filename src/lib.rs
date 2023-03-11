@@ -135,7 +135,7 @@ pub fn handle_transaction(
     let mut tree = CommitmentTree::<Node>::read(buff).expect("Cannot decode commitment tree!");
     let extsk = decode_extsk(&enc_extsk, is_testnet);
     let key = UnifiedFullViewingKey::new(Some(extsk.to_diversifiable_full_viewing_key()), None)
-        .expect("Failed to create key");
+        .expect("Failed to create unified full viewing key");
     let (nullifiers, comp_note) =
         handle_transaction_internal(&mut tree, &tx, &key, true).expect("Cannot decode tx");
     let mut ser_comp_note: Vec<(Note, String)> = vec![];
@@ -205,11 +205,16 @@ pub fn handle_transaction_internal(
 }
 
 #[wasm_bindgen]
-pub fn remove_unspent_notes(data: JsValue, enc_extsk: String, is_testnet: bool) -> JsValue {
-    let unser_data: JSTxSaplingData =
-        serde_wasm_bindgen::from_value(data).expect("Cannot serialize sapling data");
-    let hex_notes = unser_data.decrypted_notes;
-    let nullifiers = unser_data.nullifiers;
+pub fn remove_unspent_notes(
+    notes_data: JsValue,
+    nullifiers_data: JsValue,
+    enc_extsk: String,
+    is_testnet: bool,
+) -> JsValue {
+    let hex_notes: Vec<(Note, String)> =
+        serde_wasm_bindgen::from_value(notes_data).expect("Cannot deserialize notes");
+    let nullifiers: Vec<String> =
+        serde_wasm_bindgen::from_value(nullifiers_data).expect("Cannot deserialize nullifiers");
     let mut notes: Vec<(Note, String, MerklePath<Node>)> = vec![];
     let mut unspent_notes: Vec<(Note, String)> = vec![];
 

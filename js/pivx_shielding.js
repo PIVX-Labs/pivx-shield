@@ -38,7 +38,6 @@ export default class PIVXShielding {
     this.lastBlock = blockHeight;
     this.commitmentTree = commitmentTree;
     this.unspentNotes = [];
-    this.nullifiers = []; // TODO: I have in mind a better method that does not need to save this
   }
 
   /**
@@ -72,17 +71,22 @@ export default class PIVXShielding {
     for (let x of res.decrypted_notes) {
       this.unspentNotes.push(x);
     }
-    for (let x of res.nullifiers) {
-      this.nullifiers.push(x);
+    if (res.nullifiers.length > 0) {
+      this.removeSpentNotes(res.nullifiers);
     }
   }
 
   /**
    * Remove the Shield Notes that match the nullifiers given in input
-   * @param {Array<String>} blockJson - Array of nullifiers 
+   * @param {Array<String>} blockJson - Array of nullifiers
    */
-  removeSpentNotes(nullifiers){
-    throw new Error("Not implemented");
+  removeSpentNotes(nullifiers) {
+    this.unspentNotes = this.shieldMan.remove_unspent_notes(
+      this.unspentNotes,
+      nullifiers,
+      this.extsk,
+      this.isTestNet
+    );
   }
   /**
    * Return number of shielded satoshis of the account
