@@ -1,19 +1,34 @@
 export default class PIVXShielding {
   /**
    * Creates a PIVXShielding object
-   * @param {Array<Number>} seed - array of 32 bytes that represents a random seed
-   * @param {Number} blockHeight - number representing the block height of creation of the wallet
-   * @param {Number} coinType - number representing the coin type, 1 represents testnet
-   * @param {Number} accountIndex - index of the account that you want to generate, by default is set to 0
+   * @param {Object} o - options
+   * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
+   * @param {String?} o.extendedSpendingKey - Extended Spending Key.
+   * @param {Number} o.blockHeight - number representing the block height of creation of the wallet
+   * @param {Number} o.coinType - number representing the coin type, 1 represents testnet
+   * @param {Number} o.accountIndex - index of the account that you want to generate, by default is set to 0
    */
-  static async createFromSeed(seed, blockHeight, coinType, accountIndex = 0) {
+  static async create({
+    seed,
+    extendedSpendingKey,
+    blockHeight,
+    coinType,
+    accountIndex = 0
+  }) {
+    if (!extendedSpendingKey && !seed) {
+      throw new Error("One of seed or extendedSpendingKey must be provided");
+    }
+    
     const shieldMan = await import("pivx-shielding");
-    const serData = {
-      seed: seed,
-      coin_type: coinType,
-      account_index: accountIndex,
-    };
-    const extsk = shieldMan.generate_extended_spending_key_from_seed(serData);
+    
+    if(!extendedSpendingKey) {
+      const serData = {
+	seed: seed,
+	coin_type: coinType,
+	account_index: accountIndex,
+      };
+      extendedSpendingKey = shieldMan.generate_extended_spending_key_from_seed(serData);
+    }
     const isTestNet = coinType == 1 ? true : false;
     const [effectiveHeight, commitmentTree] = shieldMan.get_closest_checkpoint(
       blockHeight,
@@ -29,19 +44,46 @@ export default class PIVXShielding {
     );
   }
 
-  constructor(shieldMan, extsk, isTestNet, blockHeight, commitmentTree) {
+  constructor(shieldMan, extsk, isTestNet, commitmentTree) {
+    /**
+     * Webassembly object that holds Shield related functions
+     * @private
+     */
     this.shieldMan = shieldMan;
+    /**
+     * Extended spending key
+     * @type {String}
+     * @private
+     */
     this.extsk = extsk;
+    /**
+     * Number of generated addresses
+     * @type {Number}
+     * @private
+     */
     this.generatedAddresses = 0;
+    /**
+     * @type {Boolean}
+     * @private
+     */
     this.isTestNet = isTestNet;
-    this.lastBlock = blockHeight;
+    /**
+     * Hex encoded commitment tree
+     * @type {String}
+     * @private
+     */
     this.commitmentTree = commitmentTree;
+    /**
+     * Hex encoded unspent notes (UTXO equivalent of shield)
+     * @type {String[]}
+     * @private
+     */
     this.unspentNotes = [];
   }
 
   /**
    * Loop through the txs of a block and update useful shield data
-   * @param {JSON} blockJson - Json of the block outputted from any PIVX node
+   * @param {{tx: String[]}} blockJson - Json of the block outputted from any PIVX node
    */
   handleBlock(blockJson) {
     for (const tx of blockJson.tx) {
@@ -96,7 +138,7 @@ export default class PIVXShielding {
   }
 
   /**
-   * @returns {string} new shielded address
+   * @returns {String} new shielded address
    */
   getNewAddress() {
     const address = this.shieldMan.generate_next_shielding_payment_address(
