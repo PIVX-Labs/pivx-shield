@@ -3,27 +3,41 @@ mod utils;
 
 use crate::checkpoint::get_checkpoint;
 
+use pivx_primitives::memo::MemoBytes;
+use pivx_primitives::transaction::fees::fixed::FeeRule;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, error::Error, io::Cursor};
 use wasm_bindgen::prelude::*;
 
-use pivx_primitives::consensus::{BlockHeight, Parameters, MAIN_NETWORK, TEST_NETWORK};
+use pivx_primitives::consensus::{BlockHeight, Network, Parameters, MAIN_NETWORK, TEST_NETWORK};
 use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
 use pivx_primitives::sapling::{note::Note, Node, Nullifier};
+use pivx_primitives::transaction::builder::Builder;
+use pivx_primitives::transaction::components::Amount;
 use pivx_primitives::transaction::Transaction;
 use pivx_primitives::zip32::sapling::ExtendedSpendingKey;
 use pivx_primitives::zip32::AccountId;
 use pivx_primitives::zip32::DiversifierIndex;
 
+use once_cell::sync::Lazy;
 use pivx_client_backend::decrypt_transaction;
-use pivx_client_backend::encoding;
+use pivx_client_backend::encoding::{self, decode_payment_address};
 use pivx_client_backend::keys::{sapling, UnifiedFullViewingKey};
 use pivx_primitives::sapling::PaymentAddress;
 use pivx_primitives::zip32::Scope;
+use pivx_proofs::prover::LocalTxProver;
+use std::path::Path;
 
 #[cfg(feature = "wee_alloc")]
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+
+static PROVER: Lazy<LocalTxProver> = Lazy::new(|| {
+    LocalTxProver::new(
+        Path::new("/home/duddino/.pivx-params/sapling-spend.params"),
+        Path::new("/home/duddino/.pivx-params/sapling-output.params"),
+    )
+});
 
 #[wasm_bindgen]
 extern "C" {
@@ -203,6 +217,105 @@ pub fn handle_transaction_internal(
         }
     }
     Ok((nullifiers, witnesses))
+}
+
+#[wasm_bindgen]
+pub fn create_transaction(
+    notes: JsValue,
+    extsk: &str,
+    to_address: &str,
+    amount: u64,
+    block_height: u32,
+    is_testnet: bool,
+) -> String {
+    let notes: Vec<(Note, String, String)> =
+        serde_wasm_bindgen::from_value(notes).expect("Cannote deserialize notes"); // Note, Witness, Address
+    let extsk = decode_extsk(extsk, is_testnet);
+
+    if is_testnet {
+        create_transaction_internal(
+            &notes,
+            &extsk,
+            to_address,
+            amount,
+            BlockHeight::from_u32(block_height),
+            TEST_NETWORK,
+        )
+        .expect("Failed to create tx");
+    } else {
+        create_transaction_internal(
+            &notes,
+            &extsk,
+            to_address,
+            amount,
+            BlockHeight::from_u32(block_height),
+            MAIN_NETWORK,
+        )
+        .expect("Failed to create tx");
+    }
+    "".into()
+}
+
+fn create_transaction_internal<T: Parameters + Copy>(
+    notes: &[(Note, String, String)],
+    extsk: &ExtendedSpendingKey,
+    to_address: &str,
+    amount: u64,
+    block_height: BlockHeight,
+    network: T,
+) -> Result<String, Box<dyn Error>> {
+    let mut builder = Builder::new(network, block_height);
+
+    let fee = 2365000;
+    let mut total = 0;
+    for (note, witness, address) in notes {
+        let address = decode_payment_address(network.hrp_sapling_payment_address(), address)
+            .map_err(|_| "Failed to decode payment address")?;
+        let witness = Cursor::new(hex::decode(witness)?);
+        let witness = IncrementalWitness::<Node>::read(witness)?;
+        builder
+            .add_sapling_spend(
+                extsk.clone(),
+                *address.diversifier(),
+                note.clone(),
+                witness.path().ok_or("Commitment Tree is empty")?,
+            )
+            .map_err(|_| "Failed to add sapling spend")?;
+        total += note.value().inner();
+        if total >= amount + fee {
+            break;
+        }
+    }
+
+    if total < amount + fee {
+        Err("Not enough balance")?;
+    }
+    let change = Amount::from_u64(total - amount - fee).map_err(|_| "Invalid change")?;
+    let amount = Amount::from_u64(amount).map_err(|_| "Invalid amount")?;
+    let to_address = decode_payment_address(network.hrp_sapling_payment_address(), to_address)
+        .map_err(|_| "Failed to decode sending address")?;
+    builder
+        .add_sapling_output(None, to_address, amount, MemoBytes::empty())
+        .map_err(|_| "Failed to add output")?;
+    builder
+        .add_sapling_output(None, get_new_address(), change, MemoBytes::empty())
+        .map_err(|_| "Failed to add change")?;
+
+    let (tx, metadata) = builder.build(
+        &*PROVER,
+        &FeeRule::non_standard(Amount::from_u64(2365000).map_err(|_| "Invalid fee")?),
+    )?;
+
+    let mut tx_hex = vec![];
+    tx.write(&mut tx_hex)?;
+    // TODO: add change to known notes
+    // And remove spent ones
+
+    Ok(hex::encode(tx_hex))
+}
+
+pub fn get_new_address() -> PaymentAddress {
+    unimplemented!()
 }
 
 #[wasm_bindgen]
