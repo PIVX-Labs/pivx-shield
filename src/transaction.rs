@@ -10,6 +10,7 @@ pub use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
 pub use pivx_primitives::memo::MemoBytes;
 pub use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
 pub use pivx_primitives::sapling::PaymentAddress;
+use pivx_primitives::sapling::prover::mock::MockTxProver;
 pub use pivx_primitives::sapling::{note::Note, Node, Nullifier};
 pub use pivx_primitives::transaction::builder::Builder;
 pub use pivx_primitives::transaction::components::Amount;
@@ -28,11 +29,9 @@ pub use wasm_bindgen::prelude::*;
 mod test;
 
 static PROVER: Lazy<LocalTxProver> = Lazy::new(|| {
-    LocalTxProver::new(
-        Path::new("/home/duddino/.pivx-params/sapling-spend.params"),
-        Path::new("/home/duddino/.pivx-params/sapling-output.params"),
-    )
+    LocalTxProver::from_bytes(&[], &[]) // TODO: add params
 });
+
 
 #[derive(Serialize, Deserialize)]
 pub struct JSTxSaplingData {
@@ -223,8 +222,9 @@ pub fn create_transaction_internal<T: Parameters + Copy>(
 
     #[cfg(not(test))]
     let mut builder = Builder::new_with_rng(network, block_height, rng);
-
-    let fee = 2365000;
+    
+    let fee = 2365000u64;
+    
     let mut total = 0;
     let mut nullifiers = vec![];
     for (note, witness) in notes {
@@ -281,15 +281,14 @@ pub fn create_transaction_internal<T: Parameters + Copy>(
         .add_sapling_output(None, change_address, change, MemoBytes::empty())
         .map_err(|_| "Failed to add change")?;
 
+    
     let (tx, _metadata) = builder.build(
         &*PROVER,
         &FeeRule::non_standard(Amount::from_u64(2365000).map_err(|_| "Invalid fee")?),
     )?;
-
+        
     let mut tx_hex = vec![];
     tx.write(&mut tx_hex)?;
-    // TODO: add change to known notes
-    // And remove spent ones
 
     Ok(JSTransaction {
         txid: tx.txid().to_string(),
