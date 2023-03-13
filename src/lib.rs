@@ -241,11 +241,6 @@ pub fn remove_spent_notes(
     serde_wasm_bindgen::to_value(&unspent_notes).expect("Cannot serialize unspent notes")
 }
 
-#[wasm_bindgen]
-pub fn greet() {
-    alert("Hello, pivx-shielding!");
-}
-
 #[cfg(test)]
 mod test {
     use crate::handle_transaction_internal;
