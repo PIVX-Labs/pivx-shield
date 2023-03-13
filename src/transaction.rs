@@ -44,9 +44,9 @@ pub struct JSTxSaplingData {
 //Input a tx and return: the updated commitment merkletree, all the nullifier found in the tx and all the node decoded with the corresponding witness
 #[wasm_bindgen]
 pub fn handle_transaction(
-    tree_hex: String,
-    tx: String,
-    enc_extsk: String,
+    tree_hex: &str,
+    tx: &str,
+    enc_extsk: &str,
     is_testnet: bool,
 ) -> JsValue {
     let buff =
