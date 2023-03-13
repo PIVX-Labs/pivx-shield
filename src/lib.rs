@@ -25,11 +25,6 @@ use pivx_primitives::zip32::Scope;
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
-#[wasm_bindgen]
-extern "C" {
-    fn alert(s: &str);
-}
-
 //Data needed to generate an extended spending key
 #[derive(Serialize, Deserialize)]
 pub struct JSExtendedSpendingKeySerData {
@@ -239,11 +234,6 @@ pub fn remove_spent_notes(
         };
     }
     serde_wasm_bindgen::to_value(&unspent_notes).expect("Cannot serialize unspent notes")
-}
-
-#[wasm_bindgen]
-pub fn greet() {
-    alert("Hello, pivx-shielding!");
 }
 
 #[cfg(test)]
