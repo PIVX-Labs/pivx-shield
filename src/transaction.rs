@@ -156,6 +156,13 @@ pub fn remove_spent_notes(
     serde_wasm_bindgen::to_value(&unspent_notes).expect("Cannot serialize unspent notes")
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct JSTransaction {
+    pub txid: String,
+    pub txhex: String,
+    pub nullifiers: Vec<String>,
+}
+
 #[wasm_bindgen]
 pub fn create_transaction(
     notes: JsValue,
@@ -165,11 +172,11 @@ pub fn create_transaction(
     amount: u64,
     block_height: u32,
     is_testnet: bool,
-) -> String {
+) -> JsValue {
     let notes: Vec<(Note, String, String)> =
         serde_wasm_bindgen::from_value(notes).expect("Cannot deserialize notes"); // Note, Witness, Address
     let extsk = decode_extsk(extsk, is_testnet);
-    if is_testnet {
+    let result = if is_testnet {
         create_transaction_internal(
             &notes,
             &extsk,
@@ -180,7 +187,6 @@ pub fn create_transaction(
             TEST_NETWORK,
         )
         .expect("Failed to create tx")
-        .0
     } else {
         create_transaction_internal(
             &notes,
@@ -192,8 +198,8 @@ pub fn create_transaction(
             MAIN_NETWORK,
         )
         .expect("Failed to create tx")
-        .0
-    }
+    };
+    serde_wasm_bindgen::to_value(&result).expect("Cannot serialize transaction")
 }
 
 fn create_transaction_internal<T: Parameters + Copy>(
@@ -204,12 +210,12 @@ fn create_transaction_internal<T: Parameters + Copy>(
     amount: u64,
     block_height: BlockHeight,
     network: T,
-) -> Result<(String, Vec<Note>), Box<dyn Error>> {
+) -> Result<JSTransaction, Box<dyn Error>> {
     let mut builder = Builder::new(network, block_height);
 
     let fee = 2365000;
     let mut total = 0;
-    let mut used_notes = vec![];
+    let mut nullifiers = vec![];
     for (note, witness, address) in notes {
         let address = decode_payment_address(network.hrp_sapling_payment_address(), address)
             .map_err(|_| "Failed to decode payment address")?;
@@ -223,7 +229,13 @@ fn create_transaction_internal<T: Parameters + Copy>(
                 witness.path().ok_or("Commitment Tree is empty")?,
             )
             .map_err(|_| "Failed to add sapling spend")?;
-        used_notes.push(note.clone());
+        let nullifier = note.nf(
+            &extsk
+                .to_diversifiable_full_viewing_key()
+                .to_nk(Scope::Internal),
+            witness.position() as u64,
+        );
+        nullifiers.push(hex::encode(nullifier.to_vec()));
         total += note.value().inner();
         if total >= amount + fee {
             break;
@@ -257,5 +269,9 @@ fn create_transaction_internal<T: Parameters + Copy>(
     // TODO: add change to known notes
     // And remove spent ones
 
-    Ok((hex::encode(tx_hex), used_notes))
+    Ok(JSTransaction {
+        txid: tx.txid().to_string(),
+        txhex: hex::encode(tx_hex),
+        nullifiers,
+    })
 }
