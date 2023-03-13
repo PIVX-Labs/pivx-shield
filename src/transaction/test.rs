@@ -58,3 +58,6 @@ pub fn check_note_serialization() {
         panic!();
     }
 }
+
+#[test]
+pub fn test_create_transaction() {}

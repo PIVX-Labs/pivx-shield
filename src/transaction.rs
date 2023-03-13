@@ -2,8 +2,10 @@ pub use crate::keys::decode_extsk;
 use once_cell::sync::Lazy;
 pub use pivx_client_backend::decrypt_transaction;
 pub use pivx_client_backend::encoding::decode_payment_address;
+use pivx_client_backend::encoding::decode_transparent_address;
 pub use pivx_client_backend::keys::UnifiedFullViewingKey;
 pub use pivx_primitives::consensus::Parameters;
+use pivx_primitives::consensus::TestNetwork;
 pub use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
 pub use pivx_primitives::memo::MemoBytes;
 pub use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
@@ -17,6 +19,7 @@ pub use pivx_primitives::zip32::AccountId;
 pub use pivx_primitives::zip32::ExtendedSpendingKey;
 pub use pivx_primitives::zip32::Scope;
 pub use pivx_proofs::prover::LocalTxProver;
+use rand_core::{CryptoRng, CryptoRngCore, OsRng, RngCore};
 pub use serde::{Deserialize, Serialize};
 pub use std::path::Path;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
@@ -185,6 +188,7 @@ pub fn create_transaction(
             amount,
             BlockHeight::from_u32(block_height),
             TEST_NETWORK,
+            OsRng::default(),
         )
         .expect("Failed to create tx")
     } else {
@@ -196,13 +200,14 @@ pub fn create_transaction(
             amount,
             BlockHeight::from_u32(block_height),
             MAIN_NETWORK,
+            OsRng::default(),
         )
         .expect("Failed to create tx")
     };
     serde_wasm_bindgen::to_value(&result).expect("Cannot serialize transaction")
 }
 
-fn create_transaction_internal<T: Parameters + Copy>(
+pub fn create_transaction_internal<T: Parameters + Copy>(
     notes: &[(Note, String)],
     extsk: &ExtendedSpendingKey,
     to_address: &str,
@@ -210,8 +215,14 @@ fn create_transaction_internal<T: Parameters + Copy>(
     amount: u64,
     block_height: BlockHeight,
     network: T,
+    #[cfg(not(test))] rng: impl RngCore + CryptoRng,
+    #[cfg(test)] rng: impl RngCore,
 ) -> Result<JSTransaction, Box<dyn Error>> {
-    let mut builder = Builder::new(network, block_height);
+    #[cfg(test)]
+    let mut builder = Builder::test_only_new_with_rng(network, block_height, rng);
+
+    #[cfg(not(test))]
+    let mut builder = Builder::new_with_rng(network, block_height, rng);
 
     let fee = 2365000;
     let mut total = 0;
@@ -245,14 +256,27 @@ fn create_transaction_internal<T: Parameters + Copy>(
     }
     let change = Amount::from_u64(total - amount - fee).map_err(|_| "Invalid change")?;
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid amount")?;
-    let to_address = decode_payment_address(network.hrp_sapling_payment_address(), to_address)
-        .map_err(|_| "Failed to decode sending address")?;
     let change_address =
         decode_payment_address(network.hrp_sapling_payment_address(), change_address)
             .map_err(|_| "Failed to decode change address")?;
-    builder
-        .add_sapling_output(None, to_address, amount, MemoBytes::empty())
-        .map_err(|_| "Failed to add output")?;
+    if to_address.starts_with(network.hrp_sapling_payment_address()) {
+        let to_address = decode_payment_address(network.hrp_sapling_payment_address(), to_address)
+            .map_err(|_| "Failed to decode sending address")?;
+        builder
+            .add_sapling_output(None, to_address, amount, MemoBytes::empty())
+            .map_err(|_| "Failed to add output")?;
+    } else {
+        let to_address = decode_transparent_address(
+            &network.b58_pubkey_address_prefix(),
+            &network.b58_script_address_prefix(),
+            to_address,
+        )?
+        .ok_or("Failed to decode transparent address")?;
+        builder
+            .add_transparent_output(&to_address, amount)
+            .map_err(|_| "Failed to add output")?;
+    }
+
     builder
         .add_sapling_output(None, change_address, change, MemoBytes::empty())
         .map_err(|_| "Failed to add change")?;
