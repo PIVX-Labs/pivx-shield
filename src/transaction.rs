@@ -161,6 +161,7 @@ pub fn create_transaction(
     notes: JsValue,
     extsk: &str,
     to_address: &str,
+    change_address: &str,
     amount: u64,
     block_height: u32,
     is_testnet: bool,
@@ -174,29 +175,31 @@ pub fn create_transaction(
             &notes,
             &extsk,
             to_address,
+            change_address,
             amount,
             BlockHeight::from_u32(block_height),
             TEST_NETWORK,
         )
-        .expect("Failed to create tx");
+        .expect("Failed to create tx")
     } else {
         create_transaction_internal(
             &notes,
             &extsk,
             to_address,
+            change_address,
             amount,
             BlockHeight::from_u32(block_height),
             MAIN_NETWORK,
         )
-        .expect("Failed to create tx");
+        .expect("Failed to create tx")
     }
-    "".into()
 }
 
 fn create_transaction_internal<T: Parameters + Copy>(
     notes: &[(Note, String, String)],
     extsk: &ExtendedSpendingKey,
     to_address: &str,
+    change_address: &str,
     amount: u64,
     block_height: BlockHeight,
     network: T,
@@ -231,14 +234,17 @@ fn create_transaction_internal<T: Parameters + Copy>(
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid amount")?;
     let to_address = decode_payment_address(network.hrp_sapling_payment_address(), to_address)
         .map_err(|_| "Failed to decode sending address")?;
+    let change_address =
+        decode_payment_address(network.hrp_sapling_payment_address(), change_address)
+            .map_err(|_| "Failed to decode change address")?;
     builder
         .add_sapling_output(None, to_address, amount, MemoBytes::empty())
         .map_err(|_| "Failed to add output")?;
     builder
-        .add_sapling_output(None, get_new_address(), change, MemoBytes::empty())
+        .add_sapling_output(None, change_address, change, MemoBytes::empty())
         .map_err(|_| "Failed to add change")?;
 
-    let (tx, metadata) = builder.build(
+    let (tx, _metadata) = builder.build(
         &*PROVER,
         &FeeRule::non_standard(Amount::from_u64(2365000).map_err(|_| "Invalid fee")?),
     )?;
@@ -249,8 +255,4 @@ fn create_transaction_internal<T: Parameters + Copy>(
     // And remove spent ones
 
     Ok(hex::encode(tx_hex))
-}
-
-fn get_new_address() -> PaymentAddress {
-    unimplemented!()
 }
