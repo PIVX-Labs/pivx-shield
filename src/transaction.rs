@@ -167,9 +167,8 @@ pub fn create_transaction(
     is_testnet: bool,
 ) -> String {
     let notes: Vec<(Note, String, String)> =
-        serde_wasm_bindgen::from_value(notes).expect("Cannote deserialize notes"); // Note, Witness, Address
+        serde_wasm_bindgen::from_value(notes).expect("Cannot deserialize notes"); // Note, Witness, Address
     let extsk = decode_extsk(extsk, is_testnet);
-
     if is_testnet {
         create_transaction_internal(
             &notes,
@@ -181,6 +180,7 @@ pub fn create_transaction(
             TEST_NETWORK,
         )
         .expect("Failed to create tx")
+        .0
     } else {
         create_transaction_internal(
             &notes,
@@ -192,6 +192,7 @@ pub fn create_transaction(
             MAIN_NETWORK,
         )
         .expect("Failed to create tx")
+        .0
     }
 }
 
@@ -203,11 +204,12 @@ fn create_transaction_internal<T: Parameters + Copy>(
     amount: u64,
     block_height: BlockHeight,
     network: T,
-) -> Result<String, Box<dyn Error>> {
+) -> Result<(String, Vec<Note>), Box<dyn Error>> {
     let mut builder = Builder::new(network, block_height);
 
     let fee = 2365000;
     let mut total = 0;
+    let mut used_notes = vec![];
     for (note, witness, address) in notes {
         let address = decode_payment_address(network.hrp_sapling_payment_address(), address)
             .map_err(|_| "Failed to decode payment address")?;
@@ -221,6 +223,7 @@ fn create_transaction_internal<T: Parameters + Copy>(
                 witness.path().ok_or("Commitment Tree is empty")?,
             )
             .map_err(|_| "Failed to add sapling spend")?;
+        used_notes.push(note.clone());
         total += note.value().inner();
         if total >= amount + fee {
             break;
@@ -254,5 +257,5 @@ fn create_transaction_internal<T: Parameters + Copy>(
     // TODO: add change to known notes
     // And remove spent ones
 
-    Ok(hex::encode(tx_hex))
+    Ok((hex::encode(tx_hex), used_notes))
 }

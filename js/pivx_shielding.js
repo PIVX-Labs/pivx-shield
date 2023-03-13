@@ -131,11 +131,19 @@ export default class PIVXShielding {
   }
 
   /**
-   * Creates a transaction, sending `amount` satoshis to the addresses
-   * @param {{address: String, amount: String}[]} targets
+   * Creates a transaction, sending `amount` satoshis to the address
+   * @param {{address: String, amount: Number}} target
    */
-  createTransaction(targets) {
-    throw new Error("Not implemented");
+  createTransaction({address, amount, blockHeight}) {
+    return this.shieldMan.create_transaction(
+      this.unspentNotes,
+      this.extsk,
+      address,
+      this.getNewAddress(),
+      amount,
+      blockHeight,
+      this.isTestnet
+    );
   }
 
   /**
