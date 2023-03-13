@@ -173,7 +173,7 @@ pub fn create_transaction(
     block_height: u32,
     is_testnet: bool,
 ) -> JsValue {
-    let notes: Vec<(Note, String, String)> =
+    let notes: Vec<(Note, String)> =
         serde_wasm_bindgen::from_value(notes).expect("Cannot deserialize notes"); // Note, Witness, Address
     let extsk = decode_extsk(extsk, is_testnet);
     let result = if is_testnet {
@@ -203,7 +203,7 @@ pub fn create_transaction(
 }
 
 fn create_transaction_internal<T: Parameters + Copy>(
-    notes: &[(Note, String, String)],
+    notes: &[(Note, String)],
     extsk: &ExtendedSpendingKey,
     to_address: &str,
     change_address: &str,
@@ -216,15 +216,13 @@ fn create_transaction_internal<T: Parameters + Copy>(
     let fee = 2365000;
     let mut total = 0;
     let mut nullifiers = vec![];
-    for (note, witness, address) in notes {
-        let address = decode_payment_address(network.hrp_sapling_payment_address(), address)
-            .map_err(|_| "Failed to decode payment address")?;
+    for (note, witness) in notes {
         let witness = Cursor::new(hex::decode(witness)?);
         let witness = IncrementalWitness::<Node>::read(witness)?;
         builder
             .add_sapling_spend(
                 extsk.clone(),
-                *address.diversifier(),
+                *note.recipient().diversifier(),
                 note.clone(),
                 witness.path().ok_or("Commitment Tree is empty")?,
             )
