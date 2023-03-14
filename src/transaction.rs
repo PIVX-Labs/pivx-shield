@@ -169,8 +169,9 @@ pub fn create_transaction(
     block_height: u32,
     is_testnet: bool,
 ) -> JsValue {
-    let notes: Vec<(Note, String)> =
-        serde_wasm_bindgen::from_value(notes).expect("Cannot deserialize notes"); // Note, Witness, Address
+    let mut notes =
+        serde_wasm_bindgen::from_value::<Vec<(Note, String)>>(notes).expect("Cannot deserialize notes");
+    notes.sort_by_key(|(note, _)| note.value().inner()); // Note, Witness, Address
     let extsk = decode_extsk(extsk, is_testnet);
     let network = if is_testnet {
         Network::TestNetwork
@@ -190,6 +191,9 @@ pub fn create_transaction(
     serde_wasm_bindgen::to_value(&result).expect("Cannot serialize transaction")
 }
 
+/// Create a transaction.
+/// The notes are used in the order they're provided
+/// It might be useful to sort them first, or use any other smart alogorithm
 pub fn create_transaction_internal(
     notes: &[(Note, String)],
     extsk: &ExtendedSpendingKey,
