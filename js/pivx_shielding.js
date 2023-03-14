@@ -159,6 +159,7 @@ export default class PIVXShielding {
   /**
    * Signals the class that a transaction was sent successfully
    * and the notes can be marked as spent
+   * @throws Error if txid is not found
    * @param{String} txid - Transaction id
    */
   finalizeTransaction(txid) {
@@ -167,6 +168,15 @@ export default class PIVXShielding {
       throw new Error(`Unknown transaction ${txid}`);
     }
     this.removeSpentNullifiers(nullifiers);
+  }
+  /**
+   * Discards the transaction, for example if
+   * there were errors in sending them.
+   * The notes won't be marked as spent.
+   * @param{String} txid - Transaction id
+   */
+  discardTransaction(txid) {
+    this.pendingTransactions.clear(txid);
   }
 
   /**
