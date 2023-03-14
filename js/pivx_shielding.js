@@ -13,21 +13,22 @@ export default class PIVXShielding {
     extendedSpendingKey,
     blockHeight,
     coinType,
-    accountIndex = 0
+    accountIndex = 0,
   }) {
     if (!extendedSpendingKey && !seed) {
       throw new Error("One of seed or extendedSpendingKey must be provided");
     }
-    
+
     const shieldMan = await import("pivx-shielding");
-    
-    if(!extendedSpendingKey) {
+
+    if (!extendedSpendingKey) {
       const serData = {
-	seed: seed,
-	coin_type: coinType,
-	account_index: accountIndex,
+        seed: seed,
+        coin_type: coinType,
+        account_index: accountIndex,
       };
-      extendedSpendingKey = shieldMan.generate_extended_spending_key_from_seed(serData);
+      extendedSpendingKey =
+        shieldMan.generate_extended_spending_key_from_seed(serData);
     }
     const isTestNet = coinType == 1 ? true : false;
     const [effectiveHeight, commitmentTree] = shieldMan.get_closest_checkpoint(
