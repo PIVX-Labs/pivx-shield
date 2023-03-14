@@ -44,14 +44,18 @@ fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
         .send()?
         .bytes()?;
 
-    assert_eq!(
-        "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4",
-        sha256::digest(&*sapling_output_bytes)
-    );
-    assert_eq!(
-        "8e48ffd23abb3a5fd9c5589204f32d9c31285a04b78096ba40a79b75677efc13",
-        sha256::digest(&*sapling_spend_bytes)
-    );
+    if sha256::digest(&*sapling_output_bytes)
+        != "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4"
+    {
+        Err("Sha256 does not match for sapling output")?;
+    }
+
+    if sha256::digest(&*sapling_spend_bytes)
+        != "8e48ffd23abb3a5fd9c5589204f32d9c31285a04b78096ba40a79b75677efc13"
+    {
+        Err("Sha256 does not match for sapling spend")?;
+    }
+
     Ok((sapling_spend_bytes.to_vec(), sapling_output_bytes.to_vec()))
 }
 
