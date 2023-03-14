@@ -80,6 +80,12 @@ export default class PIVXShielding {
      * @private
      */
     this.unspentNotes = [];
+
+    /**
+     * @type {Map<String, String[]>} A map txid->nullifiers, storing pending transaction.
+     * @private
+     */
+    this.pendingTransactions = new Map();
   }
 
   /**
@@ -131,11 +137,46 @@ export default class PIVXShielding {
   }
 
   /**
-   * Creates a transaction, sending `amount` satoshis to the addresses
-   * @param {{address: String, amount: String}[]} targets
+   * Creates a transaction, sending `amount` satoshis to the address
+   * @param {{address: String, amount: Number}} target
    */
-  createTransaction(targets) {
-    throw new Error("Not implemented");
+  createTransaction({address, amount, blockHeight}) {
+    const { txid, txhex, nullifiers } = this.shieldMan.create_transaction(
+      this.unspentNotes,
+      this.extsk,
+      address,
+      this.getNewAddress(),
+      amount,
+      blockHeight,
+      this.isTestnet
+    );
+
+    this.pendingTransactions.set(txid, nullifiers);
+
+    return txhex;
+  }
+
+  /**
+   * Signals the class that a transaction was sent successfully
+   * and the notes can be marked as spent
+   * @throws Error if txid is not found
+   * @param{String} txid - Transaction id
+   */
+  finalizeTransaction(txid) {
+    const nullifiers = this.pendingTransactions.get(txid);
+    if (!nullifiers) {
+      throw new Error(`Unknown transaction ${txid}`);
+    }
+    this.removeSpentNullifiers(nullifiers);
+  }
+  /**
+   * Discards the transaction, for example if
+   * there were errors in sending them.
+   * The notes won't be marked as spent.
+   * @param{String} txid - Transaction id
+   */
+  discardTransaction(txid) {
+    this.pendingTransactions.clear(txid);
   }
 
   /**
