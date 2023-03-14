@@ -25,24 +25,30 @@ pub use serde::{Deserialize, Serialize};
 pub use std::path::Path;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
 pub use wasm_bindgen::prelude::*;
+pub use reqwest::Client;
+
+use async_once::AsyncOnce;
+use lazy_static::lazy_static;
 
 mod test;
 
-static PROVER: Lazy<LocalTxProver> = Lazy::new(|| {
-    let (sapling_spend_bytes, sapling_output_bytes) = fetch_params().expect("Cannot fetch params");
-    LocalTxProver::from_bytes(&sapling_spend_bytes, &sapling_output_bytes)
-});
+lazy_static! {
+    static ref PROVER: AsyncOnce<LocalTxProver> = AsyncOnce::new(async {
+        let (sapling_spend_bytes, sapling_output_bytes) : (Vec<u8>, Vec<u8>) = fetch_params().await.expect("Cannot fetch params");
+        LocalTxProver::from_bytes(&sapling_spend_bytes, &sapling_output_bytes)
+    });
+}
 
-fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
-    let c = reqwest::blocking::Client::new();
+async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
+    let c = Client::new();
     let sapling_output_bytes = c
         .get("https://duddino.com/sapling-output.params")
-        .send()?
-        .bytes()?;
+        .send().await?
+        .bytes().await?;
     let sapling_spend_bytes = c
         .get("https://duddino.com/sapling-spend.params")
-        .send()?
-        .bytes()?;
+        .send().await?
+        .bytes().await?;
 
     if sha256::digest(&*sapling_output_bytes)
         != "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4"
@@ -187,7 +193,7 @@ pub struct JSTransaction {
 }
 
 #[wasm_bindgen]
-pub fn create_transaction(
+pub async fn create_transaction(
     notes: JsValue,
     extsk: &str,
     to_address: &str,
@@ -215,14 +221,14 @@ pub fn create_transaction(
         BlockHeight::from_u32(block_height),
         network,
     )
-    .expect("Failed to create tx");
+    .await.expect("Failed to create tx");
     serde_wasm_bindgen::to_value(&result).expect("Cannot serialize transaction")
 }
 
 /// Create a transaction.
 /// The notes are used in the order they're provided
 /// It might be useful to sort them first, or use any other smart alogorithm
-pub fn create_transaction_internal(
+pub async fn create_transaction_internal(
     notes: &[(Note, String)],
     extsk: &ExtendedSpendingKey,
     to_address: &str,
@@ -294,7 +300,7 @@ pub fn create_transaction_internal(
     #[cfg(not(test))]
     return {
         let (tx, _metadata) = builder.build(
-            &*PROVER,
+            &*PROVER.get().await,
             &FeeRule::non_standard(Amount::from_u64(2365000).map_err(|_| "Invalid fee")?),
         )?;
 

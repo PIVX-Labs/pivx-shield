@@ -140,8 +140,8 @@ export default class PIVXShielding {
    * Creates a transaction, sending `amount` satoshis to the address
    * @param {{address: String, amount: Number}} target
    */
-  createTransaction({address, amount, blockHeight}) {
-    const { txid, txhex, nullifiers } = this.shieldMan.create_transaction(
+  async createTransaction({address, amount, blockHeight}) {
+    const { txid, txhex, nullifiers } = await this.shieldMan.create_transaction(
       this.unspentNotes,
       this.extsk,
       address,
