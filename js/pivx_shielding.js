@@ -74,7 +74,7 @@ export default class PIVXShielding {
      */
     this.commitmentTree = commitmentTree;
     /**
-     * Hex encoded unspent notes (UTXO equivalent of shield)
+     * Hex encoded unspent notes (UTXO equivalent in shield)
      * @type {String[]}
      * @private
      */
