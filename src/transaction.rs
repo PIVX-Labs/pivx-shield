@@ -12,6 +12,9 @@ pub use pivx_primitives::memo::MemoBytes;
 pub use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
 pub use pivx_primitives::sapling::PaymentAddress;
 
+use async_once::AsyncOnce;
+pub use either::Either;
+use lazy_static::lazy_static;
 pub use pivx_primitives::sapling::{note::Note, Node, Nullifier};
 pub use pivx_primitives::transaction::builder::Builder;
 pub use pivx_primitives::transaction::components::Amount;
@@ -22,17 +25,15 @@ pub use pivx_primitives::zip32::AccountId;
 pub use pivx_primitives::zip32::ExtendedSpendingKey;
 pub use pivx_primitives::zip32::Scope;
 pub use pivx_proofs::prover::LocalTxProver;
-pub use reqwest::Client;
 use rand_core::OsRng;
+pub use reqwest::Client;
 use secp256k1::SecretKey;
 pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 pub use std::path::Path;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
 pub use wasm_bindgen::prelude::*;
-use async_once::AsyncOnce;
-use lazy_static::lazy_static;
-pub use either::Either;
+
 mod test;
 
 lazy_static! {
@@ -246,16 +247,16 @@ pub async fn create_transaction(options: JsValue) -> JsValue {
         Network::MainNetwork
     };
     let input = if let Some(mut notes) = notes {
-	notes.sort_by_key(|(note, _)| note.value().inner());
-	Either::Left(notes)
+        notes.sort_by_key(|(note, _)| note.value().inner());
+        Either::Left(notes)
     } else if let Some(mut utxos) = utxos {
-	utxos.sort_by_key(|u| u.amount);
-	Either::Right(utxos)
+        utxos.sort_by_key(|u| u.amount);
+        Either::Right(utxos)
     } else {
-	panic!("No input provided")
+        panic!("No input provided")
     };
     let result = create_transaction_internal(
-	input,
+        input,
         &extsk,
         &to_address,
         &change_address,
@@ -282,10 +283,10 @@ pub async fn create_transaction_internal(
 ) -> Result<JSTransaction, Box<dyn Error>> {
     let mut builder = Builder::new(network, block_height);
     let (nullifiers, change) = match inputs {
-	Either::Left(notes) => 	choose_notes(&mut builder, &notes, extsk, amount)?,
-	Either::Right(utxos) => choose_utxos(&mut builder, &utxos, amount)?,
+        Either::Left(notes) => choose_notes(&mut builder, &notes, extsk, amount)?,
+        Either::Right(utxos) => choose_utxos(&mut builder, &utxos, amount)?,
     };
-    
+
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid Amount")?;
 
     let change_address =
@@ -327,25 +328,32 @@ fn choose_utxos(
     let mut used_utxos = vec![];
 
     for utxo in utxos {
-	used_utxos.push(utxo.txid.clone());
-	builder.add_transparent_input(
-	    SecretKey::from_slice(&utxo.private_key)?,
-	    OutPoint::new(hex::decode(&utxo.txid)?.try_into().map_err(|_| "Failed to decode txid")?, utxo.vout),
-	    TxOut {
-		value: Amount::from_u64(utxo.amount).map_err(|_| "Invalid utxo amount")?,
-		script_pubkey: Script(utxo.script.clone())
-	    },
-	).map_err(|_| "Failed to use utxo")?;
-	total += utxo.amount;
-	if total >= amount + fee {
-	    break;
-	}
+        used_utxos.push(utxo.txid.clone());
+        builder
+            .add_transparent_input(
+                SecretKey::from_slice(&utxo.private_key)?,
+                OutPoint::new(
+                    hex::decode(&utxo.txid)?
+                        .try_into()
+                        .map_err(|_| "Failed to decode txid")?,
+                    utxo.vout,
+                ),
+                TxOut {
+                    value: Amount::from_u64(utxo.amount).map_err(|_| "Invalid utxo amount")?,
+                    script_pubkey: Script(utxo.script.clone()),
+                },
+            )
+            .map_err(|_| "Failed to use utxo")?;
+        total += utxo.amount;
+        if total >= amount + fee {
+            break;
+        }
     }
 
     if total < amount + fee {
-	Err("Not enough balance")?;
+        Err("Not enough balance")?;
     }
-    
+
     let change = Amount::from_u64(total - amount - fee).map_err(|_| "Invalid change")?;
     Ok((used_utxos, change))
 }

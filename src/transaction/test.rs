@@ -18,7 +18,6 @@ use pivx_primitives::sapling::Rseed::BeforeZip212;
 use std::error::Error;
 use std::io::Cursor;
 
-
 #[test]
 fn check_tx_decryption() {
     let mut tree = CommitmentTree::<Node>::empty();
