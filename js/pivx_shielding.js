@@ -1,3 +1,5 @@
+import bs58 from 'bs58';
+
 export default class PIVXShielding {
   /**
    * Creates a PIVXShielding object
@@ -146,19 +148,19 @@ export default class PIVXShielding {
   }
 
   /**
-   * Creates a transaction, sending `amount` satoshis to the address
+   * Createes a transaction, sending `amount` satoshis to the address
    * @param {{address: String, amount: Number}} target
    */
-  async createTransaction({ address, amount, blockHeight }) {
-    const { txid, txhex, nullifiers } = await this.shieldMan.create_transaction(
-      this.unspentNotes,
-      this.extsk,
-      address,
-      this.getNewAddress(),
+  async createTransaction({address, amount, blockHeight}) {
+    const { txid, txhex, nullifiers } = await this.shieldMan.create_transaction({
+      notes: this.unspentNotes,
+      extsk: this.extsk,
+      to_address: address,
+      change_address: this.getNewAddress(),
       amount,
-      blockHeight,
-      this.isTestnet
-    );
+      block_height: blockHeight,
+      is_testnet: this.isTestnet,
+    });
 
     this.pendingTransactions.set(txid, nullifiers);
 
@@ -203,5 +205,20 @@ export default class PIVXShielding {
 
   async loadSaplingProver() {
     return await this.shieldMan.load_prover();
+  }
+
+  /**
+   * Add a transparent UTXO, along with its private key
+   * @param {Object} o - Options
+   * @param {String} o.txid - Transaction ID of the UTXO
+   * @param {Number} o.vout - output index of the UTXO
+   * @param {Number} o.amount - Value in satoshi of the UTXO
+   * @param {String} o.privateKey - Private key associated to the UTXO
+   */
+  addUTXO({txid, vout, amount, privateKey}) {
+    const wifBytes = bs58.decode(privateKey);
+    this.utxos.push({
+      txid, vout, amount, wifBytes,
+    });
   }
 }
