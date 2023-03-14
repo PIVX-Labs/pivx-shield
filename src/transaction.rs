@@ -29,8 +29,31 @@ pub use wasm_bindgen::prelude::*;
 mod test;
 
 static PROVER: Lazy<LocalTxProver> = Lazy::new(|| {
-    LocalTxProver::from_bytes(&[], &[]) // TODO: add params
+    let (sapling_spend_bytes, sapling_output_bytes) = fetch_params().expect("Cannot fetch params");
+    LocalTxProver::from_bytes(&sapling_spend_bytes, &sapling_output_bytes)
 });
+
+fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
+    let c = reqwest::blocking::Client::new();
+    let sapling_output_bytes = c
+        .get("https://duddino.com/sapling-output.params")
+        .send()?
+        .bytes()?;
+    let sapling_spend_bytes = c
+        .get("https://duddino.com/sapling-spend.params")
+        .send()?
+        .bytes()?;
+
+    assert_eq!(
+        "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4",
+        sha256::digest(&*sapling_output_bytes)
+    );
+    assert_eq!(
+        "8e48ffd23abb3a5fd9c5589204f32d9c31285a04b78096ba40a79b75677efc13",
+        sha256::digest(&*sapling_spend_bytes)
+    );
+    Ok((sapling_spend_bytes.to_vec(), sapling_output_bytes.to_vec()))
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct JSTxSaplingData {
@@ -170,8 +193,8 @@ pub fn create_transaction(
     is_testnet: bool,
 ) -> JsValue {
     // Note, witness
-    let mut notes =
-        serde_wasm_bindgen::from_value::<Vec<(Note, String)>>(notes).expect("Cannot deserialize notes");
+    let mut notes = serde_wasm_bindgen::from_value::<Vec<(Note, String)>>(notes)
+        .expect("Cannot deserialize notes");
     notes.sort_by_key(|(note, _)| note.value().inner());
     let extsk = decode_extsk(extsk, is_testnet);
     let network = if is_testnet {

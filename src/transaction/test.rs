@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use crate::transaction::create_transaction_internal;
+use crate::transaction::fetch_params;
 
 use super::handle_transaction_internal;
 use jubjub::Fr;
@@ -14,8 +15,10 @@ use pivx_primitives::sapling::value::NoteValue;
 use pivx_primitives::sapling::Node;
 use pivx_primitives::sapling::Note;
 use pivx_primitives::sapling::Rseed::BeforeZip212;
+use pivx_proofs::prover::LocalTxProver;
 use std::error::Error;
 use std::io::Cursor;
+use std::io::Read;
 use std::num::Wrapping;
 
 #[test]
