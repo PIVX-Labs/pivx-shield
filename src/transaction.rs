@@ -170,8 +170,8 @@ pub fn create_transaction(
     is_testnet: bool,
 ) -> JsValue {
     // Note, witness
-    let mut notes =
-        serde_wasm_bindgen::from_value::<Vec<(Note, String)>>(notes).expect("Cannot deserialize notes");
+    let mut notes = serde_wasm_bindgen::from_value::<Vec<(Note, String)>>(notes)
+        .expect("Cannot deserialize notes");
     notes.sort_by_key(|(note, _)| note.value().inner());
     let extsk = decode_extsk(extsk, is_testnet);
     let network = if is_testnet {
