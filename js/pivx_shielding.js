@@ -220,7 +220,7 @@ export default class PIVXShielding {
   }
 }
 
-class UTXO {
+export class UTXO {
   /**
    * Add a transparent UTXO, along with its private key
    * @param {Object} o - Options
