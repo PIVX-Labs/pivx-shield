@@ -21,11 +21,11 @@ pub use pivx_primitives::zip32::AccountId;
 pub use pivx_primitives::zip32::ExtendedSpendingKey;
 pub use pivx_primitives::zip32::Scope;
 pub use pivx_proofs::prover::LocalTxProver;
+pub use reqwest::Client;
 pub use serde::{Deserialize, Serialize};
 pub use std::path::Path;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
 pub use wasm_bindgen::prelude::*;
-pub use reqwest::Client;
 
 use async_once::AsyncOnce;
 use lazy_static::lazy_static;
@@ -34,7 +34,8 @@ mod test;
 
 lazy_static! {
     static ref PROVER: AsyncOnce<LocalTxProver> = AsyncOnce::new(async {
-        let (sapling_spend_bytes, sapling_output_bytes) : (Vec<u8>, Vec<u8>) = fetch_params().await.expect("Cannot fetch params");
+        let (sapling_spend_bytes, sapling_output_bytes): (Vec<u8>, Vec<u8>) =
+            fetch_params().await.expect("Cannot fetch params");
         LocalTxProver::from_bytes(&sapling_spend_bytes, &sapling_output_bytes)
     });
 }
@@ -43,12 +44,16 @@ async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
     let c = Client::new();
     let sapling_output_bytes = c
         .get("https://duddino.com/sapling-output.params")
-        .send().await?
-        .bytes().await?;
+        .send()
+        .await?
+        .bytes()
+        .await?;
     let sapling_spend_bytes = c
         .get("https://duddino.com/sapling-spend.params")
-        .send().await?
-        .bytes().await?;
+        .send()
+        .await?
+        .bytes()
+        .await?;
 
     if sha256::digest(&*sapling_output_bytes)
         != "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4"
@@ -63,6 +68,12 @@ async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
     }
 
     Ok((sapling_spend_bytes.to_vec(), sapling_output_bytes.to_vec()))
+}
+
+#[wasm_bindgen]
+pub async fn load_prover() -> JsValue {
+    PROVER.get().await;
+    serde_wasm_bindgen::to_value(&true).expect("Cannot serialize a bool")
 }
 
 #[derive(Serialize, Deserialize)]
@@ -221,7 +232,8 @@ pub async fn create_transaction(
         BlockHeight::from_u32(block_height),
         network,
     )
-    .await.expect("Failed to create tx");
+    .await
+    .expect("Failed to create tx");
     serde_wasm_bindgen::to_value(&result).expect("Cannot serialize transaction")
 }
 
