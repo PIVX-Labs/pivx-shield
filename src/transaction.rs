@@ -240,6 +240,7 @@ pub async fn create_transaction(options: JsValue) -> JsValue {
         is_testnet,
         utxos,
     } = serde_wasm_bindgen::from_value::<JSTxOptions>(options).expect("Cannot deserialize notes");
+    assert!(!(notes.is_some() && utxos.is_some()), "Notes and UTXOs were both provided");
     let extsk = decode_extsk(&extsk, is_testnet);
     let network = if is_testnet {
         Network::TestNetwork
