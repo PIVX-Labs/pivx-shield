@@ -1,3 +1,5 @@
+import bs58 from "bs58";
+
 export default class PIVXShielding {
   /**
    * Creates a PIVXShielding object
@@ -147,21 +149,31 @@ export default class PIVXShielding {
 
   /**
    * Creates a transaction, sending `amount` satoshis to the address
-   * @param {{address: String, amount: Number}} target
+   * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool, utxos: UTXO[]?}} target
    */
-  async createTransaction({ address, amount, blockHeight }) {
+  async createTransaction({
+    address,
+    amount,
+    blockHeight,
+    useShieldInputs = true,
+    utxos,
+  }) {
     const { txid, txhex, nullifiers } = await this.shieldMan.create_transaction(
-      this.unspentNotes,
-      this.extsk,
-      address,
-      this.getNewAddress(),
-      amount,
-      blockHeight,
-      this.isTestnet
+      {
+        notes: useShieldInputs ? this.unspentNotes : null,
+        utxos: useShieldInputs ? null : utxos,
+        extsk: this.extsk,
+        to_address: address,
+        change_address: this.getNewAddress(),
+        amount,
+        block_height: blockHeight,
+        is_testnet: this.isTestnet,
+      }
     );
 
-    this.pendingTransactions.set(txid, nullifiers);
-
+    if (useShieldInputs) {
+      this.pendingTransactions.set(txid, nullifiers);
+    }
     return txhex;
   }
 
@@ -173,9 +185,6 @@ export default class PIVXShielding {
    */
   finalizeTransaction(txid) {
     const nullifiers = this.pendingTransactions.get(txid);
-    if (!nullifiers) {
-      throw new Error(`Unknown transaction ${txid}`);
-    }
     this.removeSpentNullifiers(nullifiers);
   }
   /**
@@ -203,5 +212,24 @@ export default class PIVXShielding {
 
   async loadSaplingProver() {
     return await this.shieldMan.load_prover();
+  }
+}
+
+export class UTXO {
+  /**
+   * Add a transparent UTXO, along with its private key
+   * @param {Object} o - Options
+   * @param {String} o.txid - Transaction ID of the UTXO
+   * @param {Number} o.vout - output index of the UTXO
+   * @param {Number} o.amount - Value in satoshi of the UTXO
+   * @param {String} o.privateKey - Private key associated to the UTXO
+   * @param {Uint8Array} o.script - Tx Script
+   */
+  constructor({ txid, vout, amount, privateKey, script }) {
+    this.txid = txid;
+    this.vout = vout;
+    this.amount = amount;
+    this.privateKey = privateKey;
+    this.script = script;
   }
 }

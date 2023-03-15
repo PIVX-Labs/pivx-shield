@@ -19,7 +19,7 @@ reqwest = { version = "0.11.14", features = ["blocking"] }
 wasm-bindgen = "0.2.63"
 wasm-bindgen-futures = "0.4.34"
 pivx_client_backend = { git = "https://github.com/Duddino/librustpvix" }
-pivx_primitives = { git = "https://github.com/Duddino/librustpvix" }
+pivx_primitives = { git = "https://github.com/Duddino/librustpvix", features = ["transparent-inputs"] }
 pivx_proofs = { git = "https://github.com/Duddino/librustpvix" }
 serde = { version = "1.0", features = ["derive"] }
 serde-wasm-bindgen = "0.4.5"
@@ -36,6 +36,9 @@ console_error_panic_hook = { version = "0.1.6", optional = true }
 # compared to the default allocator's ~10K. It is slower than the default
 # allocator, however.
 wee_alloc = { version = "0.4.5", optional = true }
+rand_core = "0.6.4"
+secp256k1 = "0.21"
+either = "1.8.1"
 
 [dev-dependencies]
 tokio = { version = "1.26.0", features = ["full"] } 

@@ -3,6 +3,7 @@
 use crate::transaction::create_transaction_internal;
 
 use super::handle_transaction_internal;
+use either::Either;
 use jubjub::Fr;
 use pivx_client_backend::encoding;
 
@@ -16,7 +17,6 @@ use pivx_primitives::sapling::Note;
 use pivx_primitives::sapling::Rseed::BeforeZip212;
 use std::error::Error;
 use std::io::Cursor;
-
 
 #[test]
 fn check_tx_decryption() {
@@ -88,7 +88,7 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
     path.write(&mut path_vec)?;
     let path = hex::encode(path_vec);
     let tx = create_transaction_internal(
-        &[(note.clone(), path)],
+        Either::Left(vec![(note.clone(), path)]),
         &extended_spending_key,
         output,
         address,
