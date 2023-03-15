@@ -153,7 +153,7 @@ export default class PIVXShielding {
   }
 
   /**
-   * Createes a transaction, sending `amount` satoshis to the address
+   * Creates a transaction, sending `amount` satoshis to the address
    * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool}} target
    */
   async createTransaction({
