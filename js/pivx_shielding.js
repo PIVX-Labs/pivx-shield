@@ -56,7 +56,7 @@ export default class PIVXShielding {
     return pivxShielding;
   }
 
-  constructor(shieldMan, extsk, isTestNet, commitmentTree) {
+  constructor(shieldMan, extsk, isTestNet, nHeight, commitmentTree) {
     /**
      * Webassembly object that holds Shield related functions
      * @private
@@ -79,6 +79,12 @@ export default class PIVXShielding {
      * @private
      */
     this.isTestNet = isTestNet;
+    /**
+     * Last processed block in the blockchain
+     * @type {Number}
+     * @private
+     */
+    this.lastProcessedBlock = nHeight;
     /**
      * Hex encoded commitment tree
      * @type {String}
@@ -104,9 +110,15 @@ export default class PIVXShielding {
    * @param {{tx: String[]}} blockJson - Json of the block outputted from any PIVX node
    */
   handleBlock(blockJson) {
+    if (this.lastProcessedBlock > blockJson.height) {
+      throw new Error(
+        "Blocks must be processed in a monotonically increasing order!"
+      );
+    }
     for (const tx of blockJson.tx) {
       this.addTransaction(tx.hex);
     }
+    this.lastProcessedBlock = blockJson.height;
   }
   /**
    * Adds a transaction to the tree. Decrypts notes and stores nullifiers
