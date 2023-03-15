@@ -93,7 +93,7 @@ export default class PIVXShielding {
     this.unspentNotes = [];
 
     /**
-     * @type {Map<String, {nullifiers: String[], isShield: bool}>} A map txid->nullifiers, storing pending transaction.
+     * @type {Map<String, String[]>} A map txid->nullifiers, storing pending transaction.
      * @private
      */
     this.pendingTransactions = new Map();
@@ -154,18 +154,19 @@ export default class PIVXShielding {
 
   /**
    * Creates a transaction, sending `amount` satoshis to the address
-   * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool}} target
+   * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool, utxos: Utxo[]}} target
    */
   async createTransaction({
     address,
     amount,
     blockHeight,
     useShieldInputs = true,
+    utxos,
   }) {
     const { txid, txhex, nullifiers } = await this.shieldMan.create_transaction(
       {
         notes: useShieldInputs ? this.unspentNotes : null,
-        utxos: useShieldInputs ? null : this.utxos,
+        utxos: useShieldInputs ? null : utxos,
         extsk: this.extsk,
         to_address: address,
         change_address: this.getNewAddress(),
@@ -175,11 +176,9 @@ export default class PIVXShielding {
       }
     );
 
-    this.pendingTransactions.set(txid, {
-      nullifiers,
-      isShield: useShieldInputs,
-    });
-
+    if (useShieldInputs) {
+      this.pendingTransactions.set(txid, nullifiers);
+    }
     return txhex;
   }
 
@@ -190,14 +189,8 @@ export default class PIVXShielding {
    * @param{String} txid - Transaction id
    */
   finalizeTransaction(txid) {
-    const { nullifiers, isShield } = this.pendingTransactions.get(txid);
-    if (isShield) {
-      this.removeSpentNullifiers(nullifiers);
-    } else {
-      this.utxos = this.utxos.filter((u) =>
-        !nullifiers.any((utxoid) => utxoid == u.txid)
-      );
-    }
+    const nullifiers = this.pendingTransactions.get(txid);
+    this.removeSpentNullifiers(nullifiers);
   }
   /**
    * Discards the transaction, for example if
@@ -225,7 +218,9 @@ export default class PIVXShielding {
   async loadSaplingProver() {
     return await this.shieldMan.load_prover();
   }
+}
 
+class UTXO {
   /**
    * Add a transparent UTXO, along with its private key
    * @param {Object} o - Options
@@ -235,14 +230,11 @@ export default class PIVXShielding {
    * @param {String} o.privateKey - Private key associated to the UTXO
    * @param {Uint8Array} o.script - Tx Script
    */
-  addUTXO({ txid, vout, amount, privateKey, script }) {
-    const wifBytes = bs58.decode(privateKey);
-    this.utxos.push({
-      txid,
-      vout,
-      amount,
-      private_key: wifBytes.slice(1, 33),
-      script,
-    });
+  constructor({ txid, vout, amount, privateKey, script }) {
+    this.txid = txid;
+    this.vout = vout;
+    this.amount = amount;
+    this.privateKey = privateKey;
+    this.script = script;
   }
 }
