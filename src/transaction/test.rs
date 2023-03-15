@@ -65,8 +65,8 @@ pub fn check_note_serialization() {
     }
 }
 
-#[test]
-pub fn test_create_transaction() -> Result<(), Box<dyn Error>> {
+#[tokio::test]
+pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
     let commitment_tree = Cursor::new(hex::decode("01579262d7062f79476e1aece5b7b8041ca4a9f05cdf86e5defbcfcc7122e51f4801927a1e0cc8d93a2e09aa9ebb671a99e79baae7d58507f19841612926a18f14700201a51e6b04344aa1ac6150116f345fc7738eeb8b4a547df6c55e3a12da025e8d3601364c5703f52e5480c057aa8b1edf1b53b727b251d5ae8fcb71706b2a9e02b429")?);
     let mut commitment_tree = CommitmentTree::<Node>::read(commitment_tree)?;
     let address =
@@ -95,7 +95,8 @@ pub fn test_create_transaction() -> Result<(), Box<dyn Error>> {
         5 * 10e6 as u64,
         BlockHeight::from_u32(317),
         Network::TestNetwork,
-    )?;
+    )
+    .await?;
 
     assert_eq!(tx.nullifiers.len(), 1);
     let nullifier = tx.nullifiers[0].to_string();
