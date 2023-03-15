@@ -16,7 +16,7 @@ use pivx_primitives::sapling::Note;
 use pivx_primitives::sapling::Rseed::BeforeZip212;
 use std::error::Error;
 use std::io::Cursor;
-use std::num::Wrapping;
+
 
 #[test]
 fn check_tx_decryption() {

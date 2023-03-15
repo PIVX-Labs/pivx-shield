@@ -1,5 +1,4 @@
 pub use crate::keys::decode_extsk;
-use once_cell::sync::Lazy;
 pub use pivx_client_backend::decrypt_transaction;
 pub use pivx_client_backend::encoding::decode_payment_address;
 use pivx_client_backend::encoding::decode_transparent_address;
@@ -71,9 +70,9 @@ async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
 }
 
 #[wasm_bindgen]
-pub async fn load_prover() -> JsValue {
+pub async fn load_prover() -> bool {
     PROVER.get().await;
-    serde_wasm_bindgen::to_value(&true).expect("Cannot serialize a bool")
+    true
 }
 
 #[derive(Serialize, Deserialize)]
@@ -312,7 +311,7 @@ pub async fn create_transaction_internal(
     #[cfg(not(test))]
     return {
         let (tx, _metadata) = builder.build(
-            &*PROVER.get().await,
+            PROVER.get().await,
             &FeeRule::non_standard(Amount::from_u64(2365000).map_err(|_| "Invalid fee")?),
         )?;
 

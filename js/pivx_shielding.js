@@ -38,19 +38,20 @@ export default class PIVXShielding {
       isTestNet
     );
 
-    if (loadSaplingData) {
-      if (!(await loadSaplingProver())) {
-        throw new Error("Cannot load sapling data");
-      }
-    }
-
-    return new PIVXShielding(
+    let pivxShielding = new PIVXShielding(
       shieldMan,
       extendedSpendingKey,
       isTestNet,
       effectiveHeight,
       commitmentTree
     );
+
+    if (loadSaplingData) {
+      if (!(await pivxShielding.loadSaplingProver())) {
+        throw new Error("Cannot load sapling data");
+      }
+    }
+    return pivxShielding;
   }
 
   constructor(shieldMan, extsk, isTestNet, commitmentTree) {
