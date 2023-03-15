@@ -93,10 +93,15 @@ export default class PIVXShielding {
     this.unspentNotes = [];
 
     /**
-     * @type {Map<String, String[]>} A map txid->nullifiers, storing pending transaction.
+     * @type {Map<String, {nullifiers: String[], isShield: bool}>} A map txid->nullifiers, storing pending transaction.
      * @private
      */
     this.pendingTransactions = new Map();
+
+    /**
+     * @type {{txid: String, vout: Number, amount: Number, privateKey: Uint8Array, script: Uint8Array}[]}
+     */
+    this.utxos = [];
   }
 
   /**
@@ -170,7 +175,10 @@ export default class PIVXShielding {
       }
     );
 
-    this.pendingTransactions.set(txid, nullifiers);
+    this.pendingTransactions.set(txid, {
+      nullifiers,
+      isShield: useShieldInputs,
+    });
 
     return txhex;
   }
@@ -182,11 +190,14 @@ export default class PIVXShielding {
    * @param{String} txid - Transaction id
    */
   finalizeTransaction(txid) {
-    const nullifiers = this.pendingTransactions.get(txid);
-    if (!nullifiers) {
-      throw new Error(`Unknown transaction ${txid}`);
+    const { nullifiers, isShield } = this.pendingTransactions.get(txid);
+    if (isShield) {
+      this.removeSpentNullifiers(nullifiers);
+    } else {
+      this.utxos = this.utxos.filter((u) =>
+        !nullifiers.any((utxoid) => utxoid == u.txid)
+      );
     }
-    this.removeSpentNullifiers(nullifiers);
   }
   /**
    * Discards the transaction, for example if
