@@ -7,6 +7,7 @@ export default class PIVXShielding {
    * @param {Number} o.blockHeight - number representing the block height of creation of the wallet
    * @param {Number} o.coinType - number representing the coin type, 1 represents testnet
    * @param {Number} o.accountIndex - index of the account that you want to generate, by default is set to 0
+   * @param {Boolean} o.loadSaplingData - if you want to load sapling parameters on creation, by deafult is set to true
    */
   static async create({
     seed,
@@ -14,6 +15,7 @@ export default class PIVXShielding {
     blockHeight,
     coinType,
     accountIndex = 0,
+    loadSaplingData = true,
   }) {
     if (!extendedSpendingKey && !seed) {
       throw new Error("One of seed or extendedSpendingKey must be provided");
@@ -36,13 +38,20 @@ export default class PIVXShielding {
       isTestNet
     );
 
-    return new PIVXShielding(
+    let pivxShielding = new PIVXShielding(
       shieldMan,
-      extsk,
+      extendedSpendingKey,
       isTestNet,
       effectiveHeight,
       commitmentTree
     );
+
+    if (loadSaplingData) {
+      if (!(await pivxShielding.loadSaplingProver())) {
+        throw new Error("Cannot load sapling data");
+      }
+    }
+    return pivxShielding;
   }
 
   constructor(shieldMan, extsk, isTestNet, commitmentTree) {
@@ -140,8 +149,8 @@ export default class PIVXShielding {
    * Creates a transaction, sending `amount` satoshis to the address
    * @param {{address: String, amount: Number}} target
    */
-  createTransaction({address, amount, blockHeight}) {
-    const { txid, txhex, nullifiers } = this.shieldMan.create_transaction(
+  async createTransaction({ address, amount, blockHeight }) {
+    const { txid, txhex, nullifiers } = await this.shieldMan.create_transaction(
       this.unspentNotes,
       this.extsk,
       address,
@@ -190,5 +199,9 @@ export default class PIVXShielding {
     );
     this.generatedAddresses += 1;
     return address;
+  }
+
+  async loadSaplingProver() {
+    return await this.shieldMan.load_prover();
   }
 }

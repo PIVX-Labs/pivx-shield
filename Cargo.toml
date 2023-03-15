@@ -11,9 +11,13 @@ crate-type = ["cdylib", "rlib"]
 default = ["console_error_panic_hook"]
 
 [dependencies]
+lazy_static = "1.4.0"
+async_once = "0.2.6"
+sha256 = "1.1.2"
 getrandom = { version = "0.2", features = ["js"] }
-imp = "0.1.0"
+reqwest = { version = "0.11.14", features = ["blocking"] }
 wasm-bindgen = "0.2.63"
+wasm-bindgen-futures = "0.4.34"
 pivx_client_backend = { git = "https://github.com/Duddino/librustpvix" }
 pivx_primitives = { git = "https://github.com/Duddino/librustpvix" }
 pivx_proofs = { git = "https://github.com/Duddino/librustpvix" }
@@ -22,7 +26,6 @@ serde-wasm-bindgen = "0.4.5"
 serde_json = "1.0.93"
 jubjub = "0.9"
 hex = "0.4.3"
-once_cell = "1.17.1"
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
@@ -35,6 +38,7 @@ console_error_panic_hook = { version = "0.1.6", optional = true }
 wee_alloc = { version = "0.4.5", optional = true }
 
 [dev-dependencies]
+tokio = { version = "1.26.0", features = ["full"] } 
 wasm-bindgen-test = "0.3.13"
 
 [profile.release]

@@ -1,5 +1,4 @@
 pub use crate::keys::decode_extsk;
-use once_cell::sync::Lazy;
 pub use pivx_client_backend::decrypt_transaction;
 pub use pivx_client_backend::encoding::decode_payment_address;
 use pivx_client_backend::encoding::decode_transparent_address;
@@ -21,16 +20,60 @@ pub use pivx_primitives::zip32::AccountId;
 pub use pivx_primitives::zip32::ExtendedSpendingKey;
 pub use pivx_primitives::zip32::Scope;
 pub use pivx_proofs::prover::LocalTxProver;
+pub use reqwest::Client;
 pub use serde::{Deserialize, Serialize};
 pub use std::path::Path;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
 pub use wasm_bindgen::prelude::*;
 
+use async_once::AsyncOnce;
+use lazy_static::lazy_static;
+
 mod test;
 
-static PROVER: Lazy<LocalTxProver> = Lazy::new(|| {
-    LocalTxProver::from_bytes(&[], &[]) // TODO: add params
-});
+lazy_static! {
+    static ref PROVER: AsyncOnce<LocalTxProver> = AsyncOnce::new(async {
+        let (sapling_spend_bytes, sapling_output_bytes): (Vec<u8>, Vec<u8>) =
+            fetch_params().await.expect("Cannot fetch params");
+        LocalTxProver::from_bytes(&sapling_spend_bytes, &sapling_output_bytes)
+    });
+}
+
+async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
+    let c = Client::new();
+    let sapling_output_bytes = c
+        .get("https://duddino.com/sapling-output.params")
+        .send()
+        .await?
+        .bytes()
+        .await?;
+    let sapling_spend_bytes = c
+        .get("https://duddino.com/sapling-spend.params")
+        .send()
+        .await?
+        .bytes()
+        .await?;
+
+    if sha256::digest(&*sapling_output_bytes)
+        != "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4"
+    {
+        Err("Sha256 does not match for sapling output")?;
+    }
+
+    if sha256::digest(&*sapling_spend_bytes)
+        != "8e48ffd23abb3a5fd9c5589204f32d9c31285a04b78096ba40a79b75677efc13"
+    {
+        Err("Sha256 does not match for sapling spend")?;
+    }
+
+    Ok((sapling_spend_bytes.to_vec(), sapling_output_bytes.to_vec()))
+}
+
+#[wasm_bindgen]
+pub async fn load_prover() -> bool {
+    PROVER.get().await;
+    true
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct JSTxSaplingData {
@@ -160,7 +203,7 @@ pub struct JSTransaction {
 }
 
 #[wasm_bindgen]
-pub fn create_transaction(
+pub async fn create_transaction(
     notes: JsValue,
     extsk: &str,
     to_address: &str,
@@ -188,6 +231,7 @@ pub fn create_transaction(
         BlockHeight::from_u32(block_height),
         network,
     )
+    .await
     .expect("Failed to create tx");
     serde_wasm_bindgen::to_value(&result).expect("Cannot serialize transaction")
 }
@@ -195,7 +239,7 @@ pub fn create_transaction(
 /// Create a transaction.
 /// The notes are used in the order they're provided
 /// It might be useful to sort them first, or use any other smart alogorithm
-pub fn create_transaction_internal(
+pub async fn create_transaction_internal(
     notes: &[(Note, String)],
     extsk: &ExtendedSpendingKey,
     to_address: &str,
@@ -267,7 +311,7 @@ pub fn create_transaction_internal(
     #[cfg(not(test))]
     return {
         let (tx, _metadata) = builder.build(
-            &*PROVER,
+            PROVER.get().await,
             &FeeRule::non_standard(Amount::from_u64(2365000).map_err(|_| "Invalid fee")?),
         )?;
 
