@@ -97,11 +97,6 @@ export default class PIVXShielding {
      * @private
      */
     this.pendingTransactions = new Map();
-
-    /**
-     * @type {{txid: String, vout: Number, amount: Number, privateKey: Uint8Array, script: Uint8Array}[]}
-     */
-    this.utxos = [];
   }
 
   /**
