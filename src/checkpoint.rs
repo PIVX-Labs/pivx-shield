@@ -1,7 +1,12 @@
 use wasm_bindgen::prelude::*;
+use crate::utils::set_panic_hook;
 
 //Return the closest checkpoint
 pub fn get_checkpoint(block_height: i32, is_testnet: bool) -> (i32, &'static str) {
+    // this is a decent place for initializing the panic hook as it's always going to be
+    // Run when the library is initialized
+    set_panic_hook();
+    
     let test_network_checkpoints = [(0,"000000"),
 (43200,"0145b24b3fb3fb5fee896cf286f121cc53b9b2b157769623ae94bf67a0e52595320006017c71fcc62766c3d9a714a42e7a7e1f03cd0da795cb88f9682596bc9e4df0794b015417eb43736a3766008063dddfa3aaeb41c0f3462d897cff901b781de54a905601497aa2027dbbddccd3791b6461167a80a6eb3892c004890dc9cdbab326a9fa3d000001a386834c8c3053059f4c4f1737bd2c35ac2b603d2014885057d56d634782f50f"),
 (86400,"0162efe4828d24c3a8ed9e06a4746f62d8f09a48e4bfa2d30efd2fd7e4b6464713000600018ca3be8edd0396d9d90fe85cfca8ccdd76ade4e05119c8a9135453dfdd62a57301459cd8b7aeb738d35c4578e3f6044a539cf3c7467fd64dd0d15ba32f87d2325e0195d553b95d9a9c1f074e92c144ebde9d795b0b2cf01304e7d9010704346f664f0001a386834c8c3053059f4c4f1737bd2c35ac2b603d2014885057d56d634782f50f"),
