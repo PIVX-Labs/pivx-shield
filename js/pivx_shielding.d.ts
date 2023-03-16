@@ -135,6 +135,6 @@ export class UTXO {
     txid: string;
     vout: number;
     amount: number;
-    privateKey: string;
+    private_key: any;
     script: Uint8Array;
 }
