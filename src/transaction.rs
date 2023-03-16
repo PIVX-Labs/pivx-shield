@@ -44,6 +44,8 @@ lazy_static! {
     });
 }
 
+static FEE: u64 = 3000000;
+
 async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
     let c = Client::new();
     let sapling_output_bytes = c
@@ -240,7 +242,10 @@ pub async fn create_transaction(options: JsValue) -> JsValue {
         is_testnet,
         utxos,
     } = serde_wasm_bindgen::from_value::<JSTxOptions>(options).expect("Cannot deserialize notes");
-    assert!(!(notes.is_some() && utxos.is_some()), "Notes and UTXOs were both provided");
+    assert!(
+        !(notes.is_some() && utxos.is_some()),
+        "Notes and UTXOs were both provided"
+    );
     let extsk = decode_extsk(&extsk, is_testnet);
     let network = if is_testnet {
         Network::TestNetwork
@@ -323,8 +328,6 @@ fn choose_utxos(
     utxos: &[Utxo],
     amount: u64,
 ) -> Result<(Vec<String>, Amount), Box<dyn Error>> {
-    let fee = 2365000u64;
-
     let mut total = 0;
     let mut used_utxos = vec![];
 
@@ -335,8 +338,11 @@ fn choose_utxos(
                 SecretKey::from_slice(&utxo.private_key)?,
                 OutPoint::new(
                     hex::decode(&utxo.txid)?
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<_>>()
                         .try_into()
-                        .map_err(|_| "Failed to decode txid")?,
+                        .map_err(|_| "failed to decode txid")?,
                     utxo.vout,
                 ),
                 TxOut {
@@ -346,16 +352,16 @@ fn choose_utxos(
             )
             .map_err(|_| "Failed to use utxo")?;
         total += utxo.amount;
-        if total >= amount + fee {
+        if total >= amount + FEE {
             break;
         }
     }
 
-    if total < amount + fee {
+    if total < amount + FEE {
         Err("Not enough balance")?;
     }
 
-    let change = Amount::from_u64(total - amount - fee).map_err(|_| "Invalid change")?;
+    let change = Amount::from_u64(total - amount - FEE).map_err(|_| "Invalid change")?;
     Ok((used_utxos, change))
 }
 
@@ -365,8 +371,6 @@ fn choose_notes(
     extsk: &ExtendedSpendingKey,
     amount: u64,
 ) -> Result<(Vec<String>, Amount), Box<dyn Error>> {
-    let fee = 2365000u64;
-
     let mut total = 0;
     let mut nullifiers = vec![];
 
@@ -389,16 +393,16 @@ fn choose_notes(
         );
         nullifiers.push(hex::encode(nullifier.to_vec()));
         total += note.value().inner();
-        if total >= amount + fee {
+        if total >= amount + FEE {
             break;
         }
     }
 
-    if total < amount + fee {
+    if total < amount + FEE {
         Err("Not enough balance")?;
     }
 
-    let change = Amount::from_u64(total - amount - fee).map_err(|_| "Invalid change")?;
+    let change = Amount::from_u64(total - amount - FEE).map_err(|_| "Invalid change")?;
     Ok((nullifiers, change))
 }
 
@@ -410,7 +414,7 @@ async fn prove_transaction(
     return {
         let (tx, _metadata) = builder.build(
             PROVER.get().await,
-            &FeeRule::non_standard(Amount::from_u64(2365000).map_err(|_| "Invalid fee")?),
+            &FeeRule::non_standard(Amount::from_u64(FEE).map_err(|_| "Invalid fee")?),
         )?;
 
         let mut tx_hex = vec![];
