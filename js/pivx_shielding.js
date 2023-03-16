@@ -1,6 +1,6 @@
 import bs58 from "bs58";
 
-export default class PIVXShielding {
+export class PIVXShielding {
   /**
    * Creates a PIVXShielding object
    * @param {Object} o - options
@@ -179,7 +179,7 @@ export default class PIVXShielding {
         change_address: this.getNewAddress(),
         amount,
         block_height: blockHeight,
-        is_testnet: this.isTestnet,
+        is_testnet: this.isTestNet,
       }
     );
 
@@ -241,7 +241,7 @@ export class UTXO {
     this.txid = txid;
     this.vout = vout;
     this.amount = amount;
-    this.privateKey = privateKey;
+    this.private_key = bs58.decode(privateKey).slice(1, 33);
     this.script = script;
   }
 }
