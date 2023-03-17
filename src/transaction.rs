@@ -55,7 +55,6 @@ fn fee_calculator(
     let tx_offset_size = 85; // fixed tx offset in byte
     let sapling_output_size = 948;
     let sapling_input_size = 384;
-    println!("{} {} {} {}",transparent_input_count, transparent_output_count, sapling_input_count, sapling_output_count);
     fee_per_byte
         * (sapling_output_count * sapling_output_size
             + sapling_input_count * sapling_input_size
