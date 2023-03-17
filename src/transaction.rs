@@ -29,7 +29,6 @@ use rand_core::OsRng;
 pub use reqwest::Client;
 use secp256k1::SecretKey;
 pub use serde::{Deserialize, Serialize};
-use std::cmp::max;
 use std::convert::TryInto;
 pub use std::path::Path;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
@@ -50,11 +49,18 @@ fn fee_calculator(
     sapling_input_count: u64,
     sapling_output_count: u64,
 ) -> u64 {
-    let logical_actions = max(transparent_input_count, transparent_output_count)
-        + max(sapling_input_count, sapling_output_count);
-    let grace_actions = 2;
-    let marginal_fee = 5000;
-    marginal_fee * max(grace_actions, logical_actions)
+    let fee_per_byte = 1000;
+    let transparent_input_size = 150;
+    let transparent_output_size = 34;
+    let tx_offset_size = 85; // fixed tx offset in byte
+    let sapling_output_size = 948;
+    let sapling_input_size = 384;
+
+    fee_per_byte
+        * (sapling_output_count * sapling_output_size
+            + sapling_input_count * sapling_input_size
+            + transparent_input_count * transparent_input_size
+            + transparent_output_count * transparent_output_size + tx_offset_size)
 }
 async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
     let c = Client::new();
@@ -298,9 +304,10 @@ pub async fn create_transaction_internal(
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
     let mut builder = Builder::new(network, block_height);
+    let (transparent_output_count, sapling_output_count)  = if  to_address.starts_with(network.hrp_sapling_payment_address()) {(0,2)} else {(1,1)};
     let (nullifiers, change, fee) = match inputs {
-        Either::Left(notes) => choose_notes(&mut builder, &notes, extsk, amount, 2)?, //FOR THE MOMENT WE ONLY HAVE SHIELD TX WITH 2 OUTPUTS
-        Either::Right(utxos) => choose_utxos(&mut builder, &utxos, amount, 2)?,
+        Either::Left(notes) => choose_notes(&mut builder, &notes, extsk, amount, transparent_output_count, sapling_output_count)?,
+        Either::Right(utxos) => choose_utxos(&mut builder, &utxos, amount,transparent_output_count, sapling_output_count)?,
     };
 
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid Amount")?;
@@ -337,6 +344,7 @@ fn choose_utxos(
     builder: &mut Builder<Network, OsRng>,
     utxos: &[Utxo],
     amount: u64,
+    transparent_output_count: u64,
     sapling_output_count: u64,
 ) -> Result<(Vec<String>, Amount, u64), Box<dyn Error>> {
     let mut total = 0;
@@ -364,7 +372,7 @@ fn choose_utxos(
             )
             .map_err(|_| "Failed to use utxo")?;
         transparent_input_count += 1;
-        fee = fee_calculator(transparent_input_count, 0, 0, sapling_output_count);
+        fee = fee_calculator(transparent_input_count, transparent_output_count, 0, sapling_output_count);
         total += utxo.amount;
         if total >= amount + fee {
             break;
@@ -384,6 +392,7 @@ fn choose_notes(
     notes: &[(Note, String)],
     extsk: &ExtendedSpendingKey,
     amount: u64,
+    transparent_output_count: u64,
     sapling_output_count: u64,
 ) -> Result<(Vec<String>, Amount, u64), Box<dyn Error>> {
     let mut total = 0;
@@ -409,7 +418,7 @@ fn choose_notes(
         );
         nullifiers.push(hex::encode(nullifier.to_vec()));
         sapling_input_count += 1;
-        fee = fee_calculator(0, 0, sapling_input_count, sapling_output_count);
+        fee = fee_calculator(0, transparent_output_count, sapling_input_count, sapling_output_count);
         total += note.value().inner();
         if total >= amount + fee {
             break;
