@@ -98,8 +98,16 @@ pub fn handle_transaction(tree_hex: &str, tx: &str, enc_extsk: &str, is_testnet:
     let extsk = decode_extsk(enc_extsk, is_testnet);
     let key = UnifiedFullViewingKey::new(Some(extsk.to_diversifiable_full_viewing_key()), None)
         .expect("Failed to create unified full viewing key");
-    let (nullifiers, comp_note) =
-        handle_transaction_internal(&mut tree, tx, &key, true).expect("Cannot decode tx");
+    let tx_result = handle_transaction_internal(&mut tree, tx, &key, true);
+    if tx_result.is_err() {
+        let res: JSTxSaplingData = JSTxSaplingData {
+            decrypted_notes: vec![],
+            nullifiers: vec![],
+            commitment_tree: tree_hex.to_string(),
+        };
+        return serde_wasm_bindgen::to_value(&res).expect("Cannot serialize tx output");
+    }
+    let (nullifiers, comp_note) = tx_result.unwrap();
     let mut ser_comp_note: Vec<(Note, String)> = vec![];
     let mut ser_nullifiers: Vec<String> = vec![];
     for (note, witness) in comp_note.iter() {
