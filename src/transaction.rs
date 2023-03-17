@@ -55,7 +55,7 @@ fn fee_calculator(
     let tx_offset_size = 85; // fixed tx offset in byte
     let sapling_output_size = 948;
     let sapling_input_size = 384;
-
+    println!("{} {} {} {}",transparent_input_count, transparent_output_count, sapling_input_count, sapling_output_count);
     fee_per_byte
         * (sapling_output_count * sapling_output_size
             + sapling_input_count * sapling_input_size
@@ -304,7 +304,7 @@ pub async fn create_transaction_internal(
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
     let mut builder = Builder::new(network, block_height);
-    let (transparent_output_count, sapling_output_count)  = if  to_address.starts_with(network.hrp_sapling_payment_address()) {(0,2)} else {(1,1)};
+    let (transparent_output_count, sapling_output_count)  = if  to_address.starts_with(network.hrp_sapling_payment_address()) {(0,2)} else {(1,2)};
     let (nullifiers, change, fee) = match inputs {
         Either::Left(notes) => choose_notes(&mut builder, &notes, extsk, amount, transparent_output_count, sapling_output_count)?,
         Either::Right(utxos) => choose_utxos(&mut builder, &utxos, amount,transparent_output_count, sapling_output_count)?,
