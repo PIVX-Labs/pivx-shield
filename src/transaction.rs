@@ -107,15 +107,30 @@ pub struct JSTxSaplingData {
 
 //Input a tx and return: the updated commitment merkletree, all the nullifier found in the tx and all the node decoded with the corresponding witness
 #[wasm_bindgen]
-pub fn handle_transaction(tree_hex: &str, tx: &str, enc_extsk: &str, is_testnet: bool) -> JsValue {
+pub fn handle_transaction(
+    tree_hex: &str,
+    tx: &str,
+    enc_extsk: &str,
+    is_testnet: bool,
+    comp_notes: JsValue,
+) -> JsValue {
     let buff =
         Cursor::new(hex::decode(tree_hex).expect("Cannot decode commitment tree from hexadecimal"));
     let mut tree = CommitmentTree::<Node>::read(buff).expect("Cannot decode commitment tree!");
     let extsk = decode_extsk(enc_extsk, is_testnet);
     let key = UnifiedFullViewingKey::new(Some(extsk.to_diversifiable_full_viewing_key()), None)
         .expect("Failed to create unified full viewing key");
-    let (nullifiers, comp_note) =
-        handle_transaction_internal(&mut tree, tx, &key, true).expect("Cannot decode tx");
+    let comp_note: Vec<(Note, String)> =
+        serde_wasm_bindgen::from_value(comp_notes).expect("Failed to decode notes");
+    let mut comp_note = comp_note
+        .into_iter()
+        .map(|(note, witness)| {
+            let wit = Cursor::new(hex::decode(witness).unwrap());
+            (note, IncrementalWitness::read(wit).unwrap())
+        })
+        .collect::<Vec<_>>();
+    let nullifiers = handle_transaction_internal(&mut tree, tx, &key, true, &mut comp_note)
+        .expect("Cannot decode tx");
     let mut ser_comp_note: Vec<(Note, String)> = vec![];
     let mut ser_nullifiers: Vec<String> = vec![];
     for (note, witness) in comp_note.iter() {
@@ -147,7 +162,8 @@ pub fn handle_transaction_internal(
     tx: &str,
     key: &UnifiedFullViewingKey,
     is_testnet: bool,
-) -> Result<(Vec<Nullifier>, Vec<(Note, IncrementalWitness<Node>)>), Box<dyn Error>> {
+    witnesses: &mut Vec<(Note, IncrementalWitness<Node>)>,
+) -> Result<Vec<Nullifier>, Box<dyn Error>> {
     let tx = Transaction::read(
         Cursor::new(hex::decode(tx)?),
         pivx_primitives::consensus::BranchId::Sapling,
@@ -159,7 +175,6 @@ pub fn handle_transaction_internal(
     } else {
         decrypt_transaction(&MAIN_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
     };
-    let mut witnesses = vec![];
     let mut nullifiers: Vec<Nullifier> = vec![];
     if let Some(sapling) = tx.sapling_bundle() {
         for x in sapling.shielded_spends() {
@@ -170,6 +185,11 @@ pub fn handle_transaction_internal(
             println!("note found!");
             tree.append(Node::from_cmu(out.cmu()))
                 .map_err(|_| "Failed to add cmu to tree")?;
+            for (_, witness) in witnesses.iter_mut() {
+                witness
+                    .append(Node::from_cmu(out.cmu()))
+                    .map_err(|_| "Failed to add cmu to witness")?;
+            }
             for note in &decrypted_tx {
                 if note.index == i {
                     // Save witness
@@ -179,7 +199,7 @@ pub fn handle_transaction_internal(
             }
         }
     }
-    Ok((nullifiers, witnesses))
+    Ok(nullifiers)
 }
 
 #[wasm_bindgen]
@@ -211,7 +231,7 @@ pub fn remove_spent_notes(
     }
     for (note, witness, path) in notes.iter() {
         let nf = hex::encode(note.nf(&nullif_key, path.position).0);
-        if nullifiers.iter().any(|x| **x == nf) {
+        if !nullifiers.iter().any(|x| **x == nf) {
             unspent_notes.push((note.clone(), witness.clone()));
         };
     }

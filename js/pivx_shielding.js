@@ -107,7 +107,7 @@ export class PIVXShielding {
 
   /**
    * Loop through the txs of a block and update useful shield data
-   * @param {{tx: String[]}} blockJson - Json of the block outputted from any PIVX node
+   * @param {{txs: String[], height: Number}} blockJson - Json of the block outputted from any PIVX node
    */
   handleBlock(blockJson) {
     if (this.lastProcessedBlock > blockJson.height) {
@@ -115,7 +115,7 @@ export class PIVXShielding {
         "Blocks must be processed in a monotonically increasing order!"
       );
     }
-    for (const tx of blockJson.tx) {
+    for (const tx of blockJson.txs) {
       this.addTransaction(tx.hex);
     }
     this.lastProcessedBlock = blockJson.height;
@@ -129,12 +129,12 @@ export class PIVXShielding {
       this.commitmentTree,
       hex,
       this.extsk,
-      this.isTestNet
+      this.isTestNet,
+      this.unspentNotes
     );
     this.commitmentTree = res.commitment_tree;
-    for (const x of res.decrypted_notes) {
-      this.unspentNotes.push(x);
-    }
+    this.unspentNotes = res.decrypted_notes;
+
     if (res.nullifiers.length > 0) {
       this.removeSpentNotes(res.nullifiers);
     }

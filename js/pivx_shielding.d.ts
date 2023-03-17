@@ -65,10 +65,11 @@ export class PIVXShielding {
     private pendingTransactions;
     /**
      * Loop through the txs of a block and update useful shield data
-     * @param {{tx: String[]}} blockJson - Json of the block outputted from any PIVX node
+     * @param {{txs: String[], height: Number}} blockJson - Json of the block outputted from any PIVX node
      */
     handleBlock(blockJson: {
-        tx: string[];
+        txs: string[];
+        height: number;
     }): void;
     /**
      * Adds a transaction to the tree. Decrypts notes and stores nullifiers
