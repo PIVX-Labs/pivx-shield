@@ -133,12 +133,9 @@ export class PIVXShielding {
       this.unspentNotes
     );
     this.commitmentTree = res.commitment_tree;
-    console.log(this.unspentNotes);
-    console.log(res.decrypted_notes);
     this.unspentNotes = res.decrypted_notes;
 
     if (res.nullifiers.length > 0) {
-      console.log("Nullifier!", res.nullifiers);
       this.removeSpentNotes(res.nullifiers);
     }
   }
