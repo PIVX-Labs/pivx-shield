@@ -114,6 +114,10 @@ export class PIVXShielding {
      */
     getNewAddress(): string;
     loadSaplingProver(): Promise<any>;
+    /**
+     * @returns {Number} The last block that has been decoded
+     */
+    getLastSyncedBlock(): number;
 }
 export class UTXO {
     /**

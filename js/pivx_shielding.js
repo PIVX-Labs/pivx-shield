@@ -225,6 +225,13 @@ export class PIVXShielding {
   async loadSaplingProver() {
     return await this.shieldMan.load_prover();
   }
+
+  /**
+   * @returns {Number} The last block that has been decoded
+   */
+  getLastSyncedBlock() {
+    return this.lastProcessedBlock;
+  }
 }
 
 export class UTXO {
