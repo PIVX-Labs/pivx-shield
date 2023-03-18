@@ -59,7 +59,8 @@ fn fee_calculator(
         * (sapling_output_count * sapling_output_size
             + sapling_input_count * sapling_input_size
             + transparent_input_count * transparent_input_size
-            + transparent_output_count * transparent_output_size + tx_offset_size)
+            + transparent_output_count * transparent_output_size
+            + tx_offset_size)
 }
 async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
     let c = Client::new();
@@ -259,7 +260,6 @@ pub struct JSTxOptions {
     utxos: Option<Vec<Utxo>>,
     extsk: String,
     to_address: String,
-    change_address: String,
     amount: u64,
     block_height: u32,
     is_testnet: bool,
@@ -271,7 +271,6 @@ pub async fn create_transaction(options: JsValue) -> JsValue {
         notes,
         extsk,
         to_address,
-        change_address,
         amount,
         block_height,
         is_testnet,
@@ -282,6 +281,7 @@ pub async fn create_transaction(options: JsValue) -> JsValue {
         "Notes and UTXOs were both provided"
     );
     let extsk = decode_extsk(&extsk, is_testnet);
+    let change_address = extsk.to_diversifiable_full_viewing_key().change_address().1;
     let network = if is_testnet {
         Network::TestNetwork
     } else {
@@ -317,23 +317,38 @@ pub async fn create_transaction_internal(
     inputs: Either<Vec<(Note, String)>, Vec<Utxo>>,
     extsk: &ExtendedSpendingKey,
     to_address: &str,
-    change_address: &str,
+    change_address: &PaymentAddress,
     amount: u64,
     block_height: BlockHeight,
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
     let mut builder = Builder::new(network, block_height);
-    let (transparent_output_count, sapling_output_count)  = if  to_address.starts_with(network.hrp_sapling_payment_address()) {(0,2)} else {(1,2)};
+    let (transparent_output_count, sapling_output_count) =
+        if to_address.starts_with(network.hrp_sapling_payment_address()) {
+            (0, 2)
+        } else {
+            (1, 2)
+        };
     let (nullifiers, change, fee) = match inputs {
-        Either::Left(notes) => choose_notes(&mut builder, &notes, extsk, amount, transparent_output_count, sapling_output_count)?,
-        Either::Right(utxos) => choose_utxos(&mut builder, &utxos, amount,transparent_output_count, sapling_output_count)?,
+        Either::Left(notes) => choose_notes(
+            &mut builder,
+            &notes,
+            extsk,
+            amount,
+            transparent_output_count,
+            sapling_output_count,
+        )?,
+        Either::Right(utxos) => choose_utxos(
+            &mut builder,
+            &utxos,
+            amount,
+            transparent_output_count,
+            sapling_output_count,
+        )?,
     };
 
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid Amount")?;
 
-    let change_address =
-        decode_payment_address(network.hrp_sapling_payment_address(), change_address)
-            .map_err(|_| "Failed to decode change address")?;
     if to_address.starts_with(network.hrp_sapling_payment_address()) {
         let to_address = decode_payment_address(network.hrp_sapling_payment_address(), to_address)
             .map_err(|_| "Failed to decode sending address")?;
@@ -353,7 +368,7 @@ pub async fn create_transaction_internal(
     }
 
     builder
-        .add_sapling_output(None, change_address, change, MemoBytes::empty())
+        .add_sapling_output(None, *change_address, change, MemoBytes::empty())
         .map_err(|_| "Failed to add change")?;
 
     prove_transaction(builder, nullifiers, fee).await
@@ -391,7 +406,12 @@ fn choose_utxos(
             )
             .map_err(|_| "Failed to use utxo")?;
         transparent_input_count += 1;
-        fee = fee_calculator(transparent_input_count, transparent_output_count, 0, sapling_output_count);
+        fee = fee_calculator(
+            transparent_input_count,
+            transparent_output_count,
+            0,
+            sapling_output_count,
+        );
         total += utxo.amount;
         if total >= amount + fee {
             break;
@@ -437,7 +457,12 @@ fn choose_notes(
         );
         nullifiers.push(hex::encode(nullifier.to_vec()));
         sapling_input_count += 1;
-        fee = fee_calculator(0, transparent_output_count, sapling_input_count, sapling_output_count);
+        fee = fee_calculator(
+            0,
+            transparent_output_count,
+            sapling_input_count,
+            sapling_output_count,
+        );
         total += note.value().inner();
         if total >= amount + fee {
             break;
