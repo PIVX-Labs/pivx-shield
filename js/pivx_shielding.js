@@ -93,7 +93,7 @@ export class PIVXShielding {
     this.commitmentTree = commitmentTree;
     /**
      * Array of notes, corresponding witness
-     * @type {[Note, String]}
+     * @type {[Note, String][]}
      * @private
      */
     this.unspentNotes = [];
