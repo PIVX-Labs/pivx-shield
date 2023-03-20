@@ -1,5 +1,6 @@
 import bs58 from "bs58";
-
+import init, * as shieldMan from 'pivx-shielding';
+let worker = null;
 export class PIVXShielding {
   /**
    * Creates a PIVXShielding object
@@ -22,8 +23,11 @@ export class PIVXShielding {
     if (!extendedSpendingKey && !seed) {
       throw new Error("One of seed or extendedSpendingKey must be provided");
     }
-
-    const shieldMan = await import("pivx-shielding");
+      await init();
+      worker = new Worker(new URL('worker_start.js', import.meta.url));
+      await (new Promise((res) => {
+	  worker.onmessage = (msg)=> { console.log(msg); res()};
+      }));
 
     if (!extendedSpendingKey) {
       const serData = {
@@ -171,6 +175,18 @@ export class PIVXShielding {
     useShieldInputs = true,
     utxos,
   }) {
+      worker.postMessage(      {
+        notes: useShieldInputs ? this.unspentNotes : null,
+        utxos: useShieldInputs ? null : utxos,
+        extsk: this.extsk,
+        to_address: address,
+        change_address: this.getNewAddress(),
+        amount,
+        block_height: blockHeight,
+        is_testnet: this.isTestNet,
+      }
+);
+      /*
     const { txid, txhex, nullifiers } = await this.shieldMan.create_transaction(
       {
         notes: useShieldInputs ? this.unspentNotes : null,
@@ -195,7 +211,7 @@ export class PIVXShielding {
             const [txid, vout] = u.split(",");
             return new UTXO({ txid, vout: Number.parseInt(vout) });
           }),
-    };
+    };*/
   }
 
   /**
@@ -234,7 +250,7 @@ export class PIVXShielding {
   }
 
   async loadSaplingProver() {
-    return await this.shieldMan.load_prover();
+      return true;//await this.shieldMan.load_prover();
   }
 
   /**
