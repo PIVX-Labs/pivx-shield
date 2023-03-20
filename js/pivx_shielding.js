@@ -1,7 +1,22 @@
 import bs58 from "bs58";
-import init, * as shieldMan from 'pivx-shielding';
-let worker = null;
+import { v4 as genuuid } from "uuid";
+
 export class PIVXShielding {
+  initWorker() {
+    this.promises = new Map();
+    this.shieldWorker.onmessage = (msg) => {
+      this.promises.get(msg.data.uuid).res(msg.data.res);
+      this.promises.delete(msg.data.uuid);
+    };
+  }
+
+  async callWorker(name, ...args) {
+    const uuid = genuuid();
+    return await new Promise((res, rej) => {
+      this.promises.set(uuid, { res, rej });
+      this.shieldWorker.postMessage({ uuid, name, args });
+    });
+  }
   /**
    * Creates a PIVXShielding object
    * @param {Object} o - options
@@ -23,33 +38,24 @@ export class PIVXShielding {
     if (!extendedSpendingKey && !seed) {
       throw new Error("One of seed or extendedSpendingKey must be provided");
     }
-      await init();
-      worker = new Worker(new URL('worker_start.js', import.meta.url));
-      await (new Promise((res) => {
-	  worker.onmessage = (msg)=> { console.log(msg); res()};
-      }));
 
-    if (!extendedSpendingKey) {
-      const serData = {
-        seed: seed,
-        coin_type: coinType,
-        account_index: accountIndex,
-      };
-      extendedSpendingKey =
-        shieldMan.generate_extended_spending_key_from_seed(serData);
-    }
-    const isTestNet = coinType == 1 ? true : false;
-    const [effectiveHeight, commitmentTree] = shieldMan.get_closest_checkpoint(
-      blockHeight,
-      isTestNet
+    const shieldWorker = new Worker(
+      new URL("worker_start.js", import.meta.url)
     );
+    await new Promise((res) => {
+      shieldWorker.onmessage = (msg) => {
+        if (msg.data === "done") res();
+      };
+    });
 
-    let pivxShielding = new PIVXShielding(
-      shieldMan,
+    const isTestNet = coinType == 1 ? true : false;
+
+    const pivxShielding = new PIVXShielding(
+      shieldWorker,
       extendedSpendingKey,
       isTestNet,
-      effectiveHeight,
-      commitmentTree
+      null,
+      null
     );
 
     if (loadSaplingData) {
@@ -57,15 +63,35 @@ export class PIVXShielding {
         throw new Error("Cannot load sapling data");
       }
     }
+    if (!extendedSpendingKey) {
+      const serData = {
+        seed: seed,
+        coin_type: coinType,
+        account_index: accountIndex,
+      };
+      extendedSpendingKey = await pivxShielding.callWorker(
+        "generate_extended_spending_key_from_seed",
+        serData
+      );
+      pivxShielding.extsk = extendedSpendingKey;
+    }
+
+    const [effectiveHeight, commitmentTree] = await pivxShielding.callWorker(
+      "get_closest_checkpoint",
+      blockHeight,
+      isTestNet
+    );
+    pivxShielding.lastProcessedBlock = effectiveHeight;
+    pivxShielding.commitmentTree = commitmentTree;
     return pivxShielding;
   }
 
-  constructor(shieldMan, extsk, isTestNet, nHeight, commitmentTree) {
+  constructor(shieldWorker, extsk, isTestNet, nHeight, commitmentTree) {
     /**
      * Webassembly object that holds Shield related functions
      * @private
      */
-    this.shieldMan = shieldMan;
+    this.shieldWorker = shieldWorker;
     /**
      * Extended spending key
      * @type {String}
@@ -106,7 +132,10 @@ export class PIVXShielding {
      * @type {Map<String, String[]>} A map txid->nullifiers, storing pending transaction.
      * @private
      */
+
     this.pendingSpentNotes = new Map();
+
+    this.initWorker();
   }
 
   /**
@@ -128,8 +157,9 @@ export class PIVXShielding {
    * Adds a transaction to the tree. Decrypts notes and stores nullifiers
    * @param {String} hex - transaction hex
    */
-  addTransaction(hex) {
-    const res = this.shieldMan.handle_transaction(
+  async addTransaction(hex) {
+    const res = await this.callWorker(
+      "handle_transaction",
       this.commitmentTree,
       hex,
       this.extsk,
@@ -148,8 +178,9 @@ export class PIVXShielding {
    * Remove the Shield Notes that match the nullifiers given in input
    * @param {Array<String>} blockJson - Array of nullifiers
    */
-  removeSpentNotes(nullifiers) {
-    this.unspentNotes = this.shieldMan.remove_spent_notes(
+  async removeSpentNotes(nullifiers) {
+    this.unspentNotes = await this.callWorker(
+      "remove_spent_notes",
       this.unspentNotes,
       nullifiers,
       this.extsk,
@@ -175,25 +206,14 @@ export class PIVXShielding {
     useShieldInputs = true,
     utxos,
   }) {
-      worker.postMessage(      {
-        notes: useShieldInputs ? this.unspentNotes : null,
-        utxos: useShieldInputs ? null : utxos,
-        extsk: this.extsk,
-        to_address: address,
-        change_address: this.getNewAddress(),
-        amount,
-        block_height: blockHeight,
-        is_testnet: this.isTestNet,
-      }
-);
-      /*
-    const { txid, txhex, nullifiers } = await this.shieldMan.create_transaction(
+    const { txid, txhex, nullifiers } = await this.callWorker(
+      "create_transaction",
       {
         notes: useShieldInputs ? this.unspentNotes : null,
         utxos: useShieldInputs ? null : utxos,
         extsk: this.extsk,
         to_address: address,
-        change_address: this.getNewAddress(),
+        change_address: await this.getNewAddress(),
         amount,
         block_height: blockHeight,
         is_testnet: this.isTestNet,
@@ -211,7 +231,7 @@ export class PIVXShielding {
             const [txid, vout] = u.split(",");
             return new UTXO({ txid, vout: Number.parseInt(vout) });
           }),
-    };*/
+    };
   }
 
   /**
@@ -238,9 +258,9 @@ export class PIVXShielding {
   /**
    * @returns {String} new shielded address
    */
-  getNewAddress() {
-    const { address, diversifier_index } =
-      this.shieldMan.generate_next_shielding_payment_address(
+  async getNewAddress() {
+    const { address, diversifier_index } = await this.callWorker(
+      "generate_next_shielding_payment_address",
         this.extsk,
         this.diversifierIndex,
         this.isTestNet
@@ -250,7 +270,7 @@ export class PIVXShielding {
   }
 
   async loadSaplingProver() {
-      return true;//await this.shieldMan.load_prover();
+    return true; //await this.shieldMan.load_prover();
   }
 
   /**

@@ -17,12 +17,15 @@ export class PIVXShielding {
         accountIndex: number;
         loadSaplingData: boolean;
     }): Promise<PIVXShielding>;
-    constructor(shieldMan: any, extsk: any, isTestNet: any, nHeight: any, commitmentTree: any);
+    constructor(shieldWorker: any, extsk: any, isTestNet: any, nHeight: any, commitmentTree: any);
+    initWorker(): void;
+    promises: any;
+    callWorker(name: any, ...args: any[]): Promise<any>;
     /**
      * Webassembly object that holds Shield related functions
      * @private
      */
-    private shieldMan;
+    private shieldWorker;
     /**
      * Extended spending key
      * @type {String}
@@ -75,12 +78,12 @@ export class PIVXShielding {
      * Adds a transaction to the tree. Decrypts notes and stores nullifiers
      * @param {String} hex - transaction hex
      */
-    addTransaction(hex: string): void;
+    addTransaction(hex: string): Promise<void>;
     /**
      * Remove the Shield Notes that match the nullifiers given in input
      * @param {Array<String>} blockJson - Array of nullifiers
      */
-    removeSpentNotes(nullifiers: any): void;
+    removeSpentNotes(nullifiers: any): Promise<void>;
     /**
      * Return number of shielded satoshis of the account
      */
@@ -118,7 +121,7 @@ export class PIVXShielding {
      * @returns {String} new shielded address
      */
     getNewAddress(): string;
-    loadSaplingProver(): Promise<any>;
+    loadSaplingProver(): Promise<boolean>;
     /**
      * @returns {Number} The last block that has been decoded
      */
