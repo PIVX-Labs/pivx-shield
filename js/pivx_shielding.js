@@ -142,14 +142,14 @@ export class PIVXShielding {
    * Loop through the txs of a block and update useful shield data
    * @param {{txs: String[], height: Number}} blockJson - Json of the block outputted from any PIVX node
    */
-  handleBlock(blockJson) {
+  async handleBlock(blockJson) {
     if (this.lastProcessedBlock > blockJson.height) {
       throw new Error(
         "Blocks must be processed in a monotonically increasing order!"
       );
     }
     for (const tx of blockJson.txs) {
-      this.addTransaction(tx.hex);
+      await this.addTransaction(tx.hex);
     }
     this.lastProcessedBlock = blockJson.height;
   }
@@ -170,7 +170,7 @@ export class PIVXShielding {
     this.unspentNotes = res.decrypted_notes;
 
     if (res.nullifiers.length > 0) {
-      this.removeSpentNotes(res.nullifiers);
+      await this.removeSpentNotes(res.nullifiers);
     }
   }
 
@@ -240,9 +240,9 @@ export class PIVXShielding {
    * @throws Error if txid is not found
    * @param{String} txid - Transaction id
    */
-  finalizeTransaction(txid) {
+  async finalizeTransaction(txid) {
     const nullifiers = this.pendingSpentNotes.get(txid);
-    this.removeSpentNotes(nullifiers);
+    await this.removeSpentNotes(nullifiers);
     this.discardTransaction(txid);
   }
   /**
@@ -269,8 +269,8 @@ export class PIVXShielding {
     return address;
   }
 
-  async loadSaplingProver() {
-    return true; //await this.shieldMan.load_prover();
+    async loadSaplingProver() {
+	return await this.callWorker("load_prover");
   }
 
   /**
