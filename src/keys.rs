@@ -63,7 +63,6 @@ pub fn generate_extended_spending_key_from_seed(val: JsValue) -> JsValue {
 }
 
 //Generate the n_address-th valid payment address given the encoded extended full viewing key and a starting index
-//Generate the n_address-th valid payment address given the encoded extended full viewing key and a starting index
 #[wasm_bindgen]
 pub fn generate_next_shielding_payment_address(
     enc_extsk: String,
