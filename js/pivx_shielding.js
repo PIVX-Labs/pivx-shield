@@ -176,6 +176,7 @@ export class PIVXShielding {
         utxos: useShieldInputs ? null : utxos,
         extsk: this.extsk,
         to_address: address,
+        change_address: this.getNewAddress(),
         amount,
         block_height: blockHeight,
         is_testnet: this.isTestNet,

@@ -260,6 +260,7 @@ pub struct JSTxOptions {
     utxos: Option<Vec<Utxo>>,
     extsk: String,
     to_address: String,
+    change_address: String,
     amount: u64,
     block_height: u32,
     is_testnet: bool,
@@ -271,6 +272,7 @@ pub async fn create_transaction(options: JsValue) -> JsValue {
         notes,
         extsk,
         to_address,
+        change_address,
         amount,
         block_height,
         is_testnet,
@@ -281,7 +283,6 @@ pub async fn create_transaction(options: JsValue) -> JsValue {
         "Notes and UTXOs were both provided"
     );
     let extsk = decode_extsk(&extsk, is_testnet);
-    let change_address = extsk.to_diversifiable_full_viewing_key().change_address().1;
     let network = if is_testnet {
         Network::TestNetwork
     } else {
@@ -317,7 +318,7 @@ pub async fn create_transaction_internal(
     inputs: Either<Vec<(Note, String)>, Vec<Utxo>>,
     extsk: &ExtendedSpendingKey,
     to_address: &str,
-    change_address: &PaymentAddress,
+    change_address: &str,
     amount: u64,
     block_height: BlockHeight,
     network: Network,
@@ -348,7 +349,9 @@ pub async fn create_transaction_internal(
     };
 
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid Amount")?;
-
+    let change_address =
+        decode_payment_address(network.hrp_sapling_payment_address(), change_address)
+            .map_err(|_| "Failed to decode change address")?;
     if to_address.starts_with(network.hrp_sapling_payment_address()) {
         let to_address = decode_payment_address(network.hrp_sapling_payment_address(), to_address)
             .map_err(|_| "Failed to decode sending address")?;
@@ -368,7 +371,7 @@ pub async fn create_transaction_internal(
     }
 
     builder
-        .add_sapling_output(None, *change_address, change, MemoBytes::empty())
+        .add_sapling_output(None, change_address, change, MemoBytes::empty())
         .map_err(|_| "Failed to add change")?;
 
     prove_transaction(builder, nullifiers, fee).await

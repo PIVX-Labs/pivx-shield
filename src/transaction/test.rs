@@ -71,16 +71,15 @@ pub fn check_note_serialization() {
 pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
     let commitment_tree = Cursor::new(hex::decode("01579262d7062f79476e1aece5b7b8041ca4a9f05cdf86e5defbcfcc7122e51f4801927a1e0cc8d93a2e09aa9ebb671a99e79baae7d58507f19841612926a18f14700201a51e6b04344aa1ac6150116f345fc7738eeb8b4a547df6c55e3a12da025e8d3601364c5703f52e5480c057aa8b1edf1b53b727b251d5ae8fcb71706b2a9e02b429")?);
     let mut commitment_tree = CommitmentTree::<Node>::read(commitment_tree)?;
+    let address =
+        "ptestsapling1nfg50r63hd4u5xn0jt2rsw52jlndtqqt87azvaflh25j4kcw2p0ann4x7ae5x8yfqvyukhu2yxx";
     let extended_spending_key = decode_extended_spending_key(TEST_NETWORK.hrp_sapling_extended_spending_key(), "p-secret-spending-key-test1qv28ajgvqyqqpqxd5cm3tzpmvjdf097t38507xvf4yd9crwllezrj8xxg2w8gz9qxhsa8gldhdh5ep487mv8n2z7s3r76xd0k73tu4v42xrkzy4fucys9p9wstpalp5qre9tyxyt8ec6l42r3xv33jre9trkuy59p7ncjpqtx8nvefnnwj6v7g84hy0da6cxhpt6vyv7gq76eag0uyqevfejfzse4tgnqw94snev26an7lcnq9w9andgkxl4juk0p879c8cwp7axwas6a92kf").map_err(|_| "Failed to decode key")?;
     let key = UnifiedFullViewingKey::new(
         Some(extended_spending_key.to_diversifiable_full_viewing_key()),
         None,
     )
     .ok_or("Failed to construct key")?;
-    let address = extended_spending_key
-        .to_diversifiable_full_viewing_key()
-        .change_address()
-        .1;
+
     let output = "yAHuqx6mZMAiPKeV35C11Lfb3Pqxdsru5D";
     let input_tx = "0300000001a347f398c8957afee7ef0fae759ff29feda25f3e72ab5052ea09729389fd48ca000000006b483045022100c332effdceaa20b3225d52d20059e443ed112d561329b81f78a9db338637e6a102204f948d70c37bfe96bbe776f8279ad5fa857c638338d8ce49f553a3ec60993d8f0121025c6802ec58464d8e65d5f01be0b7ce6e8404e4a99f28ea3bfe47efe40df9108cffffffff01e89bd55a050000001976a9147888a1affe25e5c7af03fffdbea29f13ee1be22b88ac0000000001006cca88ffffffff000150585de8e31e6c65dfa07981275f13ebb8c9c67d8c7d088622aacca6c35c67a23642ad16653acda3cf9b5230f652592197e578ea1eae78c2496a3dc274a4ba0b522216af4c44abd4e9b81964d0a801929df1cb543c4fea041d056cc493b2f8dd90db662a0a43dae4d80a8cb0bd93e22b7000c0bcdab93f94800b88268a78a4d77147f2f16bde98b2386e5ac4025260df5f63adaef13bc8d7a920dbd14fa7e8ef0c5ff29f00942341e29b15509bfa99b4b1bd0ba29c5cf2c419113c27288b3a8d8f4919a4845e47d4e5fe1d1081a98e0ee49bb0e422b339e949276a1264c236850d9beb94c7855143a4f00689d1bf8d996eee9f0ee865ca780713f5aa1990aa848d47a39ea45c926141a1ff5a5a45c2e2e78d470a180e02b3dd47e0b206a4542d4dbfc540023ee5cb35e54a086942657232c27a15c87eef6dd11587e871ea690a45002e0b60605d7c4ac7fde81a71aadde9d0cc0d5c347fbe942993bd2a69ca2ca98ea0885454e7387d609192094bea075b96f020a8ed7080b5ef0aaf13e73da67a68e377db62720724e8c0d2913487be2a3e39380b33a90f0336f07fa031345a42784460356987da3227bd40a8cf933e4b8661020cf566af785a5c9b404c84153a69d9280739cb567c6cdf41f7a1a38b4d5847b33956b4dfa847b386850eff2a3e9fe7434fb551d1c6d31fae868a2f491ebd4f382a0ac203652f4be9fb3cff3ed10e6295639af76a41e40e562862d4359e4874b565aa1bae4b68abb0a7fe66884b75250d16276521925ead4821c7f04338286c2e52e7772f980d7a228ad2b89c18c8eeaf3ee1b4d5c5a959fc93c1cda3f9340f8256a88076b96a8718efc5dcb3733e3e11f6ca1198a97a248ff4ab0a7e883e360b8495470badc7ec75f84e58d87ff83d03c594a11b9029177efa5fea026a71c2c328a6356bd447eb154ac39e43963118033fc1a72702b12e641e7dfa8f98a58e43d75f6b3350af9fc54e683c6074cfd76e86752d7f598b6816696a4f17ba5f10c983ad2f8e102f44f42b2d07b24fb599abbfd067373c4b00f9ae830fcdd79ca8fa8c90eb414f8f5bb070d1199b9e9fae7124772865e0d6f486d7f10f073a0d61bd9e8c94b7a963c831e76b5c07cef22c06877a683aca53396289b115f8b59989f3d5906c4961891ef4677ce73d752ee0ba8929056f38d7630b02db2188d512d733126fa2479217dcd5ed4061928e5ba374300d7a5fa08af2b64cbf5a2176e07b3a4a5bb4812c46c2e608d364d8589225f9b7620116e0cd6a175ab397d295ff0ee0100d2415db6c6736a0f6e2248a62c4c47b39103f67e30814cf3c9b0b82936546d4b81826cd8fdebe24ae91a81b69e7188f4b18c3422d61b367bc4ca92f8815c0fc42caf524b3337a8b9a6737557e1d471745e02a8e88a19fe730e224126d290a";
 
@@ -96,7 +95,7 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
         Either::Left(vec![(note.clone(), path)]),
         &extended_spending_key,
         output,
-        &address,
+        address,
         5 * 10e6 as u64,
         BlockHeight::from_u32(317),
         Network::TestNetwork,
