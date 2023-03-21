@@ -11,9 +11,9 @@ start();
 self.onmessage = async (msg) => {
   const { uuid, name, args } = msg.data;
 
-    try {
-	const res = await shieldMan[name](...args);
-	self.postMessage({ uuid, res });
+  try {
+    const res = await shieldMan[name](...args);
+    self.postMessage({ uuid, res });
   } catch (e) {
     self.postMessage({ uuid, res: false });
     console.log("Work failed :(");

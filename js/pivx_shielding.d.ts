@@ -73,7 +73,7 @@ export class PIVXShielding {
     handleBlock(blockJson: {
         txs: string[];
         height: number;
-    }): void;
+    }): Promise<void>;
     /**
      * Adds a transaction to the tree. Decrypts notes and stores nullifiers
      * @param {String} hex - transaction hex
@@ -121,7 +121,7 @@ export class PIVXShielding {
      * @returns {String} new shielded address
      */
     getNewAddress(): string;
-    loadSaplingProver(): Promise<boolean>;
+    loadSaplingProver(): Promise<any>;
     /**
      * @returns {Number} The last block that has been decoded
      */

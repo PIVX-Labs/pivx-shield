@@ -269,8 +269,8 @@ export class PIVXShielding {
     return address;
   }
 
-    async loadSaplingProver() {
-	return await this.callWorker("load_prover");
+  async loadSaplingProver() {
+    return await this.callWorker("load_prover");
   }
 
   /**
