@@ -459,7 +459,7 @@ fn choose_notes(
         let nullifier = note.nf(
             &extsk
                 .to_diversifiable_full_viewing_key()
-                .to_nk(Scope::Internal),
+                .to_nk(Scope::External),
             witness.position() as u64,
         );
         nullifiers.push(hex::encode(nullifier.to_vec()));

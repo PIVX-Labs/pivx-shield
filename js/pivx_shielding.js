@@ -198,6 +198,7 @@ export class PIVXShielding {
   finalizeTransaction(txid) {
     const nullifiers = this.pendingSpentNotes.get(txid);
     this.removeSpentNotes(nullifiers);
+    this.discardTransaction(txid);
   }
   /**
    * Discards the transaction, for example if

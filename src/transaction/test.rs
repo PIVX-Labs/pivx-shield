@@ -106,7 +106,7 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
     let nullifier = tx.nullifiers[0].to_string();
     assert_eq!(
         nullifier,
-        "57af9d8b344e1b37d91b5cdaa2b99e17f67049ce86e2d05aaa9d3e7b25feba91"
+        "5269442d8022af933774f9f22775566d92089a151ba733f6d751f5bb65a7f56d"
     );
     // When we implement mempool, test that new notes work correctly
 
