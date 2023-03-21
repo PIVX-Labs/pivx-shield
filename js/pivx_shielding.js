@@ -5,7 +5,12 @@ export class PIVXShielding {
   initWorker() {
     this.promises = new Map();
     this.shieldWorker.onmessage = (msg) => {
-      this.promises.get(msg.data.uuid).res(msg.data.res);
+      const { res, rej } = this.promises.get(msg.data.uuid);
+      if (msg.data.rej) {
+	rej(msg.data.rej);
+      } else {
+	res(msg.data.res);
+      }
       this.promises.delete(msg.data.uuid);
     };
   }

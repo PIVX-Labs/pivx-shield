@@ -2,7 +2,8 @@ import init, * as shieldMan from "pivx-shielding";
 
 const start = async () => {
   await init();
-  await shieldMan.initThreadPool(navigator.hardwareConcurrency);
+  if (shieldMan.initThreadPool)  
+    await shieldMan.initThreadPool(navigator.hardwareConcurrency);
   self.postMessage("done");
 };
 
@@ -15,8 +16,7 @@ self.onmessage = async (msg) => {
     const res = await shieldMan[name](...args);
     self.postMessage({ uuid, res });
   } catch (e) {
-    self.postMessage({ uuid, res: false });
-    console.log("Work failed :(");
-    console.error(e);
+    self.postMessage({ uuid, rej: e });
+    throw e;
   }
 };
