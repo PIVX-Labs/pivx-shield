@@ -323,6 +323,7 @@ pub async fn create_transaction_internal(
     block_height: BlockHeight,
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
+    let mut amount = amount;
     let mut builder = Builder::new(network, block_height);
     let (transparent_output_count, sapling_output_count) =
         if to_address.starts_with(network.hrp_sapling_payment_address()) {
@@ -335,14 +336,14 @@ pub async fn create_transaction_internal(
             &mut builder,
             &notes,
             extsk,
-            amount,
+            &mut amount,
             transparent_output_count,
             sapling_output_count,
         )?,
         Either::Right(utxos) => choose_utxos(
             &mut builder,
             &utxos,
-            amount,
+            &mut amount,
             transparent_output_count,
             sapling_output_count,
         )?,
@@ -380,7 +381,7 @@ pub async fn create_transaction_internal(
 fn choose_utxos(
     builder: &mut Builder<Network, OsRng>,
     utxos: &[Utxo],
-    amount: u64,
+    amount: &mut u64,
     transparent_output_count: u64,
     sapling_output_count: u64,
 ) -> Result<(Vec<String>, Amount, u64), Box<dyn Error>> {
@@ -416,16 +417,19 @@ fn choose_utxos(
             sapling_output_count,
         );
         total += utxo.amount;
-        if total >= amount + fee {
+        if total >= *amount + fee {
             break;
         }
     }
-
-    if total < amount + fee {
-        Err("Not enough balance")?;
+    if total < *amount + fee {
+        if total > *amount {
+            *amount -= fee;
+        } else {
+            Err("Not enough balance")?;
+        }
     }
 
-    let change = Amount::from_u64(total - amount - fee).map_err(|_| "Invalid change")?;
+    let change = Amount::from_u64(total - *amount - fee).map_err(|_| "Invalid change")?;
     Ok((used_utxos, change, fee))
 }
 
@@ -433,7 +437,7 @@ fn choose_notes(
     builder: &mut Builder<Network, OsRng>,
     notes: &[(Note, String)],
     extsk: &ExtendedSpendingKey,
-    amount: u64,
+    amount: &mut u64,
     transparent_output_count: u64,
     sapling_output_count: u64,
 ) -> Result<(Vec<String>, Amount, u64), Box<dyn Error>> {
@@ -467,16 +471,20 @@ fn choose_notes(
             sapling_output_count,
         );
         total += note.value().inner();
-        if total >= amount + fee {
+        if total >= *amount + fee {
             break;
         }
     }
 
-    if total < amount + fee {
-        Err("Not enough balance")?;
+    if total < *amount + fee {
+        if total > *amount {
+            *amount -= fee
+        } else {
+            Err("Not enough balance")?;
+        }
     }
 
-    let change = Amount::from_u64(total - amount - fee).map_err(|_| "Invalid change")?;
+    let change = Amount::from_u64(total - *amount - fee).map_err(|_| "Invalid change")?;
     Ok((nullifiers, change, fee))
 }
 
