@@ -8,6 +8,7 @@ mod utils;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 use wasm_bindgen::prelude::*;
+#[cfg(feature = "multicore")]
 pub use wasm_bindgen_rayon::init_thread_pool;
 
 #[wasm_bindgen(start)]
