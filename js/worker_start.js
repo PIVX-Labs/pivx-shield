@@ -1,13 +1,13 @@
-import { threads } from 'wasm-feature-detect';
+import { threads } from "wasm-feature-detect";
 let shieldMan = null;
 
 const start = async () => {
   if (await threads()) {
-    shieldMan = await import('pivx-shielding-multicore');
+    shieldMan = await import("pivx-shielding-multicore");
     await shieldMan.default();
     await shieldMan.initThreadPool(navigator.hardwareConcurrency);
   } else {
-    shieldMan = await import('pivx-shielding');
+    shieldMan = await import("pivx-shielding");
     await shieldMan.default();
   }
   self.postMessage("done");

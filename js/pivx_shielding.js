@@ -7,9 +7,9 @@ export class PIVXShielding {
     this.shieldWorker.onmessage = (msg) => {
       const { res, rej } = this.promises.get(msg.data.uuid);
       if (msg.data.rej) {
-	rej(msg.data.rej);
+        rej(msg.data.rej);
       } else {
-	res(msg.data.res);
+        res(msg.data.res);
       }
       this.promises.delete(msg.data.uuid);
     };
@@ -266,10 +266,10 @@ export class PIVXShielding {
   async getNewAddress() {
     const { address, diversifier_index } = await this.callWorker(
       "generate_next_shielding_payment_address",
-        this.extsk,
-        this.diversifierIndex,
-        this.isTestNet
-      );
+      this.extsk,
+      this.diversifierIndex,
+      this.isTestNet
+    );
     this.diversifierIndex = diversifier_index;
     return address;
   }

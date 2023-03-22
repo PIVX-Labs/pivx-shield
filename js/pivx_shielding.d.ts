@@ -109,7 +109,7 @@ export class PIVXShielding {
      * @throws Error if txid is not found
      * @param{String} txid - Transaction id
      */
-    finalizeTransaction(txid: string): void;
+    finalizeTransaction(txid: string): Promise<void>;
     /**
      * Discards the transaction, for example if
      * there were errors in sending them.
