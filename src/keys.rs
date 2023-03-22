@@ -73,10 +73,10 @@ pub fn generate_next_shielding_payment_address(
     let mut found_addresses = 0;
     let mut diversifier_index = DiversifierIndex::new();
     loop {
-        let bundle_adress = extsk
+        let bundle_address = extsk
             .to_diversifiable_full_viewing_key()
             .find_address(diversifier_index);
-        if let Some((new_diversifier_index, payment_address)) = bundle_adress {
+        if let Some((new_diversifier_index, payment_address)) = bundle_address {
             let enc_addr = encode_payment_address(&payment_address, is_testnet);
             diversifier_index = new_diversifier_index;
             found_addresses += 1;
