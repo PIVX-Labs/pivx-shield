@@ -319,11 +319,10 @@ pub async fn create_transaction_internal(
     extsk: &ExtendedSpendingKey,
     to_address: &str,
     change_address: &str,
-    amount: u64,
+    mut amount: u64,
     block_height: BlockHeight,
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
-    let mut amount = amount;
     let mut builder = Builder::new(network, block_height);
     let (transparent_output_count, sapling_output_count) =
         if to_address.starts_with(network.hrp_sapling_payment_address()) {

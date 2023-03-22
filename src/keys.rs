@@ -72,20 +72,17 @@ pub fn generate_next_shielding_payment_address(
     let extsk = decode_extsk(&enc_extsk, is_testnet);
     let mut found_addresses = 0;
     let mut diversifier_index = DiversifierIndex::new();
-    let mut last_addres: String = "".to_string();
     loop {
-        let payment_address = extsk
+        let bundle_adress = extsk
             .to_diversifiable_full_viewing_key()
             .find_address(diversifier_index);
-        if let Some(payment_address) = payment_address {
-            let enc_addr = encode_payment_address(&payment_address.1, is_testnet);
-            if !(enc_addr == last_addres) {
-                last_addres = enc_addr.clone();
-                found_addresses += 1;
-                if found_addresses == n_address {
-                    return serde_wasm_bindgen::to_value(&enc_addr)
-                        .expect("Cannot serialize payment address");
-                }
+        if let Some((new_diversifier_index, payment_address)) = bundle_adress {
+            let enc_addr = encode_payment_address(&payment_address, is_testnet);
+            diversifier_index = new_diversifier_index;
+            found_addresses += 1;
+            if found_addresses == n_address {
+                return serde_wasm_bindgen::to_value(&enc_addr)
+                    .expect("Cannot serialize payment address");
             }
         }
         diversifier_index
