@@ -92,8 +92,8 @@ export class PIVXShielding {
      */
     this.commitmentTree = commitmentTree;
     /**
-     * Hex encoded unspent notes (UTXO equivalent in shield)
-     * @type {String[]}
+     * Array of notes, corresponding witness
+     * @type {[Note, String][]}
      * @private
      */
     this.unspentNotes = [];
@@ -102,7 +102,7 @@ export class PIVXShielding {
      * @type {Map<String, String[]>} A map txid->nullifiers, storing pending transaction.
      * @private
      */
-    this.pendingTransactions = new Map();
+    this.pendingSpentNotes = new Map();
   }
 
   /**
@@ -184,7 +184,7 @@ export class PIVXShielding {
     );
 
     if (useShieldInputs) {
-      this.pendingTransactions.set(txid, nullifiers);
+      this.pendingSpentNotes.set(txid, nullifiers);
     }
     return txhex;
   }
@@ -196,8 +196,9 @@ export class PIVXShielding {
    * @param{String} txid - Transaction id
    */
   finalizeTransaction(txid) {
-    const nullifiers = this.pendingTransactions.get(txid);
-    this.removeSpentNullifiers(nullifiers);
+    const nullifiers = this.pendingSpentNotes.get(txid);
+    this.removeSpentNotes(nullifiers);
+    this.discardTransaction(txid);
   }
   /**
    * Discards the transaction, for example if
@@ -206,7 +207,7 @@ export class PIVXShielding {
    * @param{String} txid - Transaction id
    */
   discardTransaction(txid) {
-    this.pendingTransactions.clear(txid);
+    this.pendingSpentNotes.clear(txid);
   }
 
   /**
@@ -231,6 +232,20 @@ export class PIVXShielding {
    */
   getLastSyncedBlock() {
     return this.lastProcessedBlock;
+  }
+}
+
+export class Note {
+  /**
+   * Class corresponding to an unspent sapling shield note
+   * @param {Array<Number>} o.recipient - Recipient PaymentAddress encoded as a byte array
+   * @param {Number} o.value - How much PIVs are in the note
+   * @param {Array<Number>} o.rseed - Random seed encoded as a byte array
+   */
+  constructor({ recipient, value, rseed }) {
+    this.recipient = recipient;
+    this.value = value;
+    this.rseed = rseed;
   }
 }
 

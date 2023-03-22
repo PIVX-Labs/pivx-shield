@@ -59,7 +59,8 @@ fn fee_calculator(
         * (sapling_output_count * sapling_output_size
             + sapling_input_count * sapling_input_size
             + transparent_input_count * transparent_input_size
-            + transparent_output_count * transparent_output_size + tx_offset_size)
+            + transparent_output_count * transparent_output_size
+            + tx_offset_size)
 }
 async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
     let c = Client::new();
@@ -318,19 +319,36 @@ pub async fn create_transaction_internal(
     extsk: &ExtendedSpendingKey,
     to_address: &str,
     change_address: &str,
-    amount: u64,
+    mut amount: u64,
     block_height: BlockHeight,
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
     let mut builder = Builder::new(network, block_height);
-    let (transparent_output_count, sapling_output_count)  = if  to_address.starts_with(network.hrp_sapling_payment_address()) {(0,2)} else {(1,2)};
+    let (transparent_output_count, sapling_output_count) =
+        if to_address.starts_with(network.hrp_sapling_payment_address()) {
+            (0, 2)
+        } else {
+            (1, 2)
+        };
     let (nullifiers, change, fee) = match inputs {
-        Either::Left(notes) => choose_notes(&mut builder, &notes, extsk, amount, transparent_output_count, sapling_output_count)?,
-        Either::Right(utxos) => choose_utxos(&mut builder, &utxos, amount,transparent_output_count, sapling_output_count)?,
+        Either::Left(notes) => choose_notes(
+            &mut builder,
+            &notes,
+            extsk,
+            &mut amount,
+            transparent_output_count,
+            sapling_output_count,
+        )?,
+        Either::Right(utxos) => choose_utxos(
+            &mut builder,
+            &utxos,
+            &mut amount,
+            transparent_output_count,
+            sapling_output_count,
+        )?,
     };
 
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid Amount")?;
-
     let change_address =
         decode_payment_address(network.hrp_sapling_payment_address(), change_address)
             .map_err(|_| "Failed to decode change address")?;
@@ -362,7 +380,7 @@ pub async fn create_transaction_internal(
 fn choose_utxos(
     builder: &mut Builder<Network, OsRng>,
     utxos: &[Utxo],
-    amount: u64,
+    amount: &mut u64,
     transparent_output_count: u64,
     sapling_output_count: u64,
 ) -> Result<(Vec<String>, Amount, u64), Box<dyn Error>> {
@@ -391,18 +409,26 @@ fn choose_utxos(
             )
             .map_err(|_| "Failed to use utxo")?;
         transparent_input_count += 1;
-        fee = fee_calculator(transparent_input_count, transparent_output_count, 0, sapling_output_count);
+        fee = fee_calculator(
+            transparent_input_count,
+            transparent_output_count,
+            0,
+            sapling_output_count,
+        );
         total += utxo.amount;
-        if total >= amount + fee {
+        if total >= *amount + fee {
             break;
         }
     }
-
-    if total < amount + fee {
-        Err("Not enough balance")?;
+    if total < *amount + fee {
+        if total > *amount {
+            *amount -= fee;
+        } else {
+            Err("Not enough balance")?;
+        }
     }
 
-    let change = Amount::from_u64(total - amount - fee).map_err(|_| "Invalid change")?;
+    let change = Amount::from_u64(total - *amount - fee).map_err(|_| "Invalid change")?;
     Ok((used_utxos, change, fee))
 }
 
@@ -410,7 +436,7 @@ fn choose_notes(
     builder: &mut Builder<Network, OsRng>,
     notes: &[(Note, String)],
     extsk: &ExtendedSpendingKey,
-    amount: u64,
+    amount: &mut u64,
     transparent_output_count: u64,
     sapling_output_count: u64,
 ) -> Result<(Vec<String>, Amount, u64), Box<dyn Error>> {
@@ -432,23 +458,32 @@ fn choose_notes(
         let nullifier = note.nf(
             &extsk
                 .to_diversifiable_full_viewing_key()
-                .to_nk(Scope::Internal),
+                .to_nk(Scope::External),
             witness.position() as u64,
         );
         nullifiers.push(hex::encode(nullifier.to_vec()));
         sapling_input_count += 1;
-        fee = fee_calculator(0, transparent_output_count, sapling_input_count, sapling_output_count);
+        fee = fee_calculator(
+            0,
+            transparent_output_count,
+            sapling_input_count,
+            sapling_output_count,
+        );
         total += note.value().inner();
-        if total >= amount + fee {
+        if total >= *amount + fee {
             break;
         }
     }
 
-    if total < amount + fee {
-        Err("Not enough balance")?;
+    if total < *amount + fee {
+        if total > *amount {
+            *amount -= fee
+        } else {
+            Err("Not enough balance")?;
+        }
     }
 
-    let change = Amount::from_u64(total - amount - fee).map_err(|_| "Invalid change")?;
+    let change = Amount::from_u64(total - *amount - fee).map_err(|_| "Invalid change")?;
     Ok((nullifiers, change, fee))
 }
 
