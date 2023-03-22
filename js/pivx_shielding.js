@@ -162,6 +162,7 @@ export class PIVXShielding {
   /**
    * Creates a transaction, sending `amount` satoshis to the address
    * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool, utxos: UTXO[]?}} target
+   * @returns {{hex: String, spentUTXOs: UTXO[]}}
    */
   async createTransaction({
     address,
@@ -186,7 +187,15 @@ export class PIVXShielding {
     if (useShieldInputs) {
       this.pendingSpentNotes.set(txid, nullifiers);
     }
-    return txhex;
+    return {
+      hex: txhex,
+      spentUTXOs: useShieldInputs
+        ? []
+        : nullifiers.map((u) => {
+            const [txid, vout] = u.split(",");
+            return new UTXO({ txid, vout: Number.parseInt(vout) });
+          }),
+    };
   }
 
   /**
@@ -255,15 +264,15 @@ export class UTXO {
    * @param {Object} o - Options
    * @param {String} o.txid - Transaction ID of the UTXO
    * @param {Number} o.vout - output index of the UTXO
-   * @param {Number} o.amount - Value in satoshi of the UTXO
-   * @param {String} o.privateKey - Private key associated to the UTXO
-   * @param {Uint8Array} o.script - Tx Script
+   * @param {Number?} o.amount - Value in satoshi of the UTXO
+   * @param {String?} o.privateKey - Private key associated to the UTXO
+   * @param {Uint8Array?} o.script - Tx Script
    */
   constructor({ txid, vout, amount, privateKey, script }) {
     this.txid = txid;
     this.vout = vout;
     this.amount = amount;
-    this.private_key = bs58.decode(privateKey).slice(1, 33);
+    this.private_key = privateKey ? bs58.decode(privateKey).slice(1, 33) : null;
     this.script = script;
   }
 }

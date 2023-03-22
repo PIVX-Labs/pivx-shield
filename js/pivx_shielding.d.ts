@@ -53,8 +53,8 @@ export class PIVXShielding {
      */
     private commitmentTree;
     /**
-     * Hex encoded unspent notes (UTXO equivalent in shield)
-     * @type {String[]}
+     * Array of notes, corresponding witness
+     * @type {[Note, String][]}
      * @private
      */
     private unspentNotes;
@@ -62,7 +62,7 @@ export class PIVXShielding {
      * @type {Map<String, String[]>} A map txid->nullifiers, storing pending transaction.
      * @private
      */
-    private pendingTransactions;
+    private pendingSpentNotes;
     /**
      * Loop through the txs of a block and update useful shield data
      * @param {{txs: String[], height: Number}} blockJson - Json of the block outputted from any PIVX node
@@ -88,6 +88,7 @@ export class PIVXShielding {
     /**
      * Creates a transaction, sending `amount` satoshis to the address
      * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool, utxos: UTXO[]?}} target
+     * @returns {{hex: String, spentUTXOs: UTXO[]}}
      */
     createTransaction({ address, amount, blockHeight, useShieldInputs, utxos, }: {
         address: string;
@@ -95,7 +96,10 @@ export class PIVXShielding {
         blockHeight: number;
         useShieldInputs: bool;
         utxos: UTXO[] | null;
-    }): Promise<any>;
+    }): {
+        hex: string;
+        spentUTXOs: UTXO[];
+    };
     /**
      * Signals the class that a transaction was sent successfully
      * and the notes can be marked as spent
@@ -120,22 +124,34 @@ export class PIVXShielding {
      */
     getLastSyncedBlock(): number;
 }
+export class Note {
+    /**
+     * Class corresponding to an unspent sapling shield note
+     * @param {Array<Number>} o.recipient - Recipient PaymentAddress encoded as a byte array
+     * @param {Number} o.value - How much PIVs are in the note
+     * @param {Array<Number>} o.rseed - Random seed encoded as a byte array
+     */
+    constructor({ recipient, value, rseed }: Array<number>);
+    recipient: any;
+    value: any;
+    rseed: any;
+}
 export class UTXO {
     /**
      * Add a transparent UTXO, along with its private key
      * @param {Object} o - Options
      * @param {String} o.txid - Transaction ID of the UTXO
      * @param {Number} o.vout - output index of the UTXO
-     * @param {Number} o.amount - Value in satoshi of the UTXO
-     * @param {String} o.privateKey - Private key associated to the UTXO
-     * @param {Uint8Array} o.script - Tx Script
+     * @param {Number?} o.amount - Value in satoshi of the UTXO
+     * @param {String?} o.privateKey - Private key associated to the UTXO
+     * @param {Uint8Array?} o.script - Tx Script
      */
     constructor({ txid, vout, amount, privateKey, script }: {
         txid: string;
         vout: number;
-        amount: number;
-        privateKey: string;
-        script: Uint8Array;
+        amount: number | null;
+        privateKey: string | null;
+        script: Uint8Array | null;
     });
     txid: string;
     vout: number;
