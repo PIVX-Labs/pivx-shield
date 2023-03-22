@@ -3,14 +3,20 @@
   "version": "1.0.0",
   "description": "",
   "main": "pivx_shielding.js",
+  "files": [
+    "start_worker.js"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc --allowJs -d --emitDeclarationOnly pivx_shielding.js"
   },
   "dependencies": {
     "bs58": "^5.0.0",
+    "comlink": "^4.4.1",
     "pivx-shielding": "file:../pkg/",
-    "typescript": "^4.9.5"
+    "pivx-shielding-multicore": "file:../pkg_multicore",
+    "typescript": "^4.9.5",
+    "wasm-feature-detect": "^1.5.1"
   },
   "author": "",
   "license": "ISC"
