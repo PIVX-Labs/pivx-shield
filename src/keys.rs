@@ -93,5 +93,5 @@ pub fn generate_next_shielding_payment_address(
         address: encode_payment_address(&address, is_testnet),
         diversifier_index: new_index.0.to_vec(),
     })
-    .expect("Faield to decode")
+    .expect("Failed to decode")
 }
