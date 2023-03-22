@@ -142,16 +142,16 @@ export class UTXO {
      * @param {Object} o - Options
      * @param {String} o.txid - Transaction ID of the UTXO
      * @param {Number} o.vout - output index of the UTXO
-     * @param {Number} o.amount - Value in satoshi of the UTXO
-     * @param {String} o.privateKey - Private key associated to the UTXO
-     * @param {Uint8Array} o.script - Tx Script
+     * @param {Number?} o.amount - Value in satoshi of the UTXO
+     * @param {String?} o.privateKey - Private key associated to the UTXO
+     * @param {Uint8Array?} o.script - Tx Script
      */
     constructor({ txid, vout, amount, privateKey, script }: {
         txid: string;
         vout: number;
-        amount: number;
-        privateKey: string;
-        script: Uint8Array;
+        amount: number | null;
+        privateKey: string | null;
+        script: Uint8Array | null;
     });
     txid: string;
     vout: number;

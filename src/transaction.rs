@@ -389,7 +389,7 @@ fn choose_utxos(
     let mut transparent_input_count = 0;
     let mut fee = 0;
     for utxo in utxos {
-        used_utxos.push(utxo.txid.clone());
+        used_utxos.push(format!("{},{}", utxo.txid, utxo.vout));
         builder
             .add_transparent_input(
                 SecretKey::from_slice(&utxo.private_key)?,
