@@ -193,7 +193,6 @@ export class PIVXShielding {
         ? []
         : nullifiers.map((u) => {
             const [txid, vout] = u.split(",");
-            console.log(u, txid, vout);
             return new UTXO({ txid, vout: Number.parseInt(vout) });
           }),
     };
