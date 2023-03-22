@@ -62,31 +62,36 @@ pub fn generate_extended_spending_key_from_seed(val: JsValue) -> JsValue {
     serde_wasm_bindgen::to_value(&enc_extsk).expect("Cannot serialize extended spending key")
 }
 
-//Generate the n_address-th valid payment address given the encoded extended full viewing key and a starting index
+#[derive(Debug, Serialize, Deserialize)]
+struct NewAddress {
+    pub address: String,
+    pub diversifier_index: Vec<u8>,
+}
+
+// Generate the n_address-th valid payment address given the encoded extended full viewing key and a starting index
 #[wasm_bindgen]
 pub fn generate_next_shielding_payment_address(
     enc_extsk: String,
-    n_address: i32,
+    diversifier_index: &[u8],
     is_testnet: bool,
 ) -> JsValue {
     let extsk = decode_extsk(&enc_extsk, is_testnet);
-    let mut found_addresses = 0;
-    let mut diversifier_index = DiversifierIndex::new();
-    loop {
-        let bundle_address = extsk
-            .to_diversifiable_full_viewing_key()
-            .find_address(diversifier_index);
-        if let Some((new_diversifier_index, payment_address)) = bundle_address {
-            let enc_addr = encode_payment_address(&payment_address, is_testnet);
-            diversifier_index = new_diversifier_index;
-            found_addresses += 1;
-            if found_addresses == n_address {
-                return serde_wasm_bindgen::to_value(&enc_addr)
-                    .expect("Cannot serialize payment address");
-            }
-        }
+    let mut diversifier_index = DiversifierIndex(
         diversifier_index
-            .increment()
-            .expect("Failed to increment the index");
-    }
+            .try_into()
+            .expect("Invalid diversifier index"),
+    );
+    diversifier_index
+        .increment()
+        .expect("No valid indeces left");
+    let (new_index, address) = extsk
+        .to_diversifiable_full_viewing_key()
+        .find_address(diversifier_index)
+        .expect("No valid indeces left"); // There are so many valid addresses this should never happen
+
+    serde_wasm_bindgen::to_value(&NewAddress {
+        address: encode_payment_address(&address, is_testnet),
+        diversifier_index: new_index.0.to_vec(),
+    })
+    .expect("Failed to decode")
 }

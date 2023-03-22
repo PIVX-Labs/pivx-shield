@@ -30,11 +30,11 @@ export class PIVXShielding {
      */
     private extsk;
     /**
-     * Number of generated addresses
-     * @type {Number}
+     * Diversifier index of the last generated address
+     * @type {Uint8Array}
      * @private
      */
-    private generatedAddresses;
+    private diversifierIndex;
     /**
      * @type {Boolean}
      * @private

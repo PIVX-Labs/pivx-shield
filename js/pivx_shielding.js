@@ -69,11 +69,11 @@ export class PIVXShielding {
      */
     this.extsk = extsk;
     /**
-     * Number of generated addresses
-     * @type {Number}
+     * Diversifier index of the last generated address
+     * @type {Uint8Array}
      * @private
      */
-    this.generatedAddresses = 0;
+    this.diversifierIndex = new Uint8Array(11);
     /**
      * @type {Boolean}
      * @private
@@ -223,12 +223,13 @@ export class PIVXShielding {
    * @returns {String} new shielded address
    */
   getNewAddress() {
-    const address = this.shieldMan.generate_next_shielding_payment_address(
-      this.extsk,
-      this.generatedAddresses + 1,
-      this.isTestNet
-    );
-    this.generatedAddresses += 1;
+    const { address, diversifier_index } =
+      this.shieldMan.generate_next_shielding_payment_address(
+        this.extsk,
+        this.diversifierIndex,
+        this.isTestNet
+      );
+    this.diversifierIndex = diversifier_index;
     return address;
   }
 
