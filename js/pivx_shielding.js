@@ -161,7 +161,7 @@ export class PIVXShielding {
     }
     for (const tx of blockJson.txs) {
       await this.addTransaction(tx.hex);
-      this.pendingUnspentNotes.clear(tx.txid);
+      this.pendingUnspentNotes.delete(tx.txid);
     }
     this.lastProcessedBlock = blockJson.height;
   }
@@ -255,7 +255,7 @@ export class PIVXShielding {
     if (useShieldInputs) {
       this.pendingSpentNotes.set(txid, nullifiers);
     }
-    this.pendingUnspentNotes.set(txid, this.addTransaction(txhex, true));
+    this.pendingUnspentNotes.set(txid, await this.addTransaction(txhex, true));
     return {
       hex: txhex,
       spentUTXOs: useShieldInputs
@@ -276,7 +276,7 @@ export class PIVXShielding {
   async finalizeTransaction(txid) {
     const nullifiers = this.pendingSpentNotes.get(txid);
     await this.removeSpentNotes(nullifiers);
-    this.pendingSpentNotes.clear(txid);
+    this.pendingSpentNotes.delete(txid);
   }
   /**
    * Discards the transaction, for example if
@@ -285,8 +285,8 @@ export class PIVXShielding {
    * @param{String} txid - Transaction id
    */
   discardTransaction(txid) {
-    this.pendingSpentNotes.clear(txid);
-    this.pendingUnspentNotes.clear(txid);
+    this.pendingSpentNotes.delete(txid);
+    this.pendingUnspentNotes.delete(txid);
   }
 
   /**
