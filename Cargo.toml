@@ -12,6 +12,7 @@ default = ["console_error_panic_hook"]
 multicore = ["pivx_proofs/multicore", "wasm-bindgen-rayon"]
 
 [dependencies]
+rayon = "1.7.0"
 lazy_static = "1.4.0"
 async_once = "0.2.6"
 sha256 = "1.1.2"
