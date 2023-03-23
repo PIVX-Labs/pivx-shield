@@ -219,11 +219,9 @@ export class PIVXShielding {
    * Return number of pending satoshis of the account
    */
   getPendingBalance() {
-    let total = 0;
-    for (let [txid, notes] of this.pendingUnspentNotes.entries()) {
-      total += notes.reduce((acc, [note]) => acc + note.value, 0);
-    }
-    return total;
+    return Array.from(this.pendingUnspentNotes.values())
+      .flat()
+      .reduce((acc, v) => acc + v[0].value, 0);
   }
 
   /**
