@@ -140,6 +140,12 @@ export class PIVXShielding {
 
     this.pendingSpentNotes = new Map();
 
+    /**
+     * @type {Map<String, Note[]>} A map txid->Notes, storing incoming spendable notes.
+     * @private
+     */
+    this.pendingUnspentNotes = new Map();
+
     this.initWorker();
   }
 
@@ -155,6 +161,7 @@ export class PIVXShielding {
     }
     for (const tx of blockJson.txs) {
       await this.addTransaction(tx.hex);
+      this.pendingUnspentNotes.clear(tx.txid);
     }
     this.lastProcessedBlock = blockJson.height;
   }
@@ -162,7 +169,7 @@ export class PIVXShielding {
    * Adds a transaction to the tree. Decrypts notes and stores nullifiers
    * @param {String} hex - transaction hex
    */
-  async addTransaction(hex) {
+  async addTransaction(hex, decryptOnly = false) {
     const res = await this.callWorker(
       "handle_transaction",
       this.commitmentTree,
@@ -171,11 +178,20 @@ export class PIVXShielding {
       this.isTestNet,
       this.unspentNotes
     );
-    this.commitmentTree = res.commitment_tree;
-    this.unspentNotes = res.decrypted_notes;
+    if (decryptOnly) {
+      return res.decrypted_notes.filter(
+        (note) =>
+          !this.unspentNotes.some(
+            (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0])
+          )
+      );
+    } else {
+      this.commitmentTree = res.commitment_tree;
+      this.unspentNotes = res.decrypted_notes;
 
-    if (res.nullifiers.length > 0) {
-      await this.removeSpentNotes(res.nullifiers);
+      if (res.nullifiers.length > 0) {
+        await this.removeSpentNotes(res.nullifiers);
+      }
     }
   }
 
@@ -197,6 +213,17 @@ export class PIVXShielding {
    */
   getBalance() {
     return this.unspentNotes.reduce((acc, [note]) => acc + note.value, 0);
+  }
+
+  /**
+   * Return number of pending satoshis of the account
+   */
+  getPendingBalance() {
+    let total = 0;
+    for (let [txid, notes] of this.pendingUnspentNotes.entries()) {
+      total += notes.reduce((acc, [note]) => acc + note.value, 0);
+    }
+    return total;
   }
 
   /**
@@ -228,6 +255,7 @@ export class PIVXShielding {
     if (useShieldInputs) {
       this.pendingSpentNotes.set(txid, nullifiers);
     }
+    this.pendingUnspentNotes.set(txid, this.addTransaction(txhex, true));
     return {
       hex: txhex,
       spentUTXOs: useShieldInputs
@@ -248,7 +276,7 @@ export class PIVXShielding {
   async finalizeTransaction(txid) {
     const nullifiers = this.pendingSpentNotes.get(txid);
     await this.removeSpentNotes(nullifiers);
-    this.discardTransaction(txid);
+    this.pendingSpentNotes.clear(txid);
   }
   /**
    * Discards the transaction, for example if
@@ -258,6 +286,7 @@ export class PIVXShielding {
    */
   discardTransaction(txid) {
     this.pendingSpentNotes.clear(txid);
+    this.pendingUnspentNotes.clear(txid);
   }
 
   /**
