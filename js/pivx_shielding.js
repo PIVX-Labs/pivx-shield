@@ -270,7 +270,9 @@ export class PIVXShielding {
           }),
     };
   }
-
+  async getTxStatus() {
+    return await this.callWorker("read_tx_progress");
+  }
   /**
    * Signals the class that a transaction was sent successfully
    * and the notes can be marked as spent

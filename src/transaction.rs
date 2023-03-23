@@ -3,12 +3,12 @@ pub use pivx_client_backend::decrypt_transaction;
 pub use pivx_client_backend::keys::UnifiedFullViewingKey;
 use pivx_primitives::consensus::Network;
 pub use pivx_primitives::consensus::Parameters;
-
 pub use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
 use pivx_primitives::legacy::Script;
 pub use pivx_primitives::memo::MemoBytes;
 pub use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
 pub use pivx_primitives::sapling::PaymentAddress;
+pub use pivx_primitives::transaction::builder::Progress;
 
 use crate::keys::decode_generic_address;
 use crate::keys::GenericAddress;
@@ -31,6 +31,10 @@ use secp256k1::SecretKey;
 pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 pub use std::path::Path;
+use std::sync::mpsc;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::Sender;
+use std::sync::Mutex;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
 pub use wasm_bindgen::prelude::*;
 mod test;
@@ -42,7 +46,9 @@ lazy_static! {
         LocalTxProver::from_bytes(&sapling_spend_bytes, &sapling_output_bytes)
     });
 }
-
+lazy_static! {
+    static ref TX_PROGRESS_LOCK: Mutex<u32> = Mutex::new(0);
+}
 fn fee_calculator(
     transparent_input_count: u64,
     transparent_output_count: u64,
@@ -91,7 +97,12 @@ async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
 
     Ok((sapling_spend_bytes.to_vec(), sapling_output_bytes.to_vec()))
 }
-
+#[wasm_bindgen]
+pub fn read_tx_progress() -> u32 {
+    return *TX_PROGRESS_LOCK
+        .lock()
+        .expect("Cannot lock the tx progress mutex");
+}
 #[wasm_bindgen]
 pub async fn load_prover() -> bool {
     PROVER.get().await;
@@ -367,6 +378,24 @@ pub async fn create_transaction_internal(
             .add_sapling_output(None, x, change, MemoBytes::empty())
             .map_err(|_| "Failed to add shield change")?,
     }
+
+    builder
+        .add_sapling_output(None, change_address, change, MemoBytes::empty())
+        .map_err(|_| "Failed to add change")?;
+    let (transmitter, receiver): (Sender<Progress>, Receiver<Progress>) = mpsc::channel();
+    builder.with_progress_notifier(transmitter);
+    rayon::spawn(move || loop {
+        let status = receiver.recv().expect("Cannot unwrap the TX Progress");
+
+        let mut tx_progress = TX_PROGRESS_LOCK
+            .lock()
+            .expect("Cannot lock the progress mutex");
+        *tx_progress = status.cur();
+        drop(tx_progress);
+        if status.end() == Some(0) {
+            break;
+        }
+    });
     prove_transaction(builder, nullifiers, fee).await
 }
 
