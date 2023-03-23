@@ -226,7 +226,7 @@ export class PIVXShielding {
 
   /**
    * Creates a transaction, sending `amount` satoshis to the address
-   * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool, utxos: UTXO[]?}} target
+   * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool, utxos: UTXO[]?, transparentChangeAddress: String?}} target
    * @returns {{hex: String, spentUTXOs: UTXO[]}}
    */
   async createTransaction({
@@ -235,7 +235,11 @@ export class PIVXShielding {
     blockHeight,
     useShieldInputs = true,
     utxos,
+    transparentChangeAddress,
   }) {
+    if (!useShieldInputs && !transparentChangeAddress) {
+      throw new Error("Change must have the same type of input used!");
+    }
     const { txid, txhex, nullifiers } = await this.callWorker(
       "create_transaction",
       {
@@ -243,7 +247,9 @@ export class PIVXShielding {
         utxos: useShieldInputs ? null : utxos,
         extsk: this.extsk,
         to_address: address,
-        change_address: await this.getNewAddress(),
+        change_address: useShieldInputs
+          ? await this.getNewAddress()
+          : transparentChangeAddress,
         amount,
         block_height: blockHeight,
         is_testnet: this.isTestNet,

@@ -67,6 +67,11 @@ export class PIVXShielding {
      */
     private pendingSpentNotes;
     /**
+     * @type {Map<String, Note[]>} A map txid->Notes, storing incoming spendable notes.
+     * @private
+     */
+    private pendingUnspentNotes;
+    /**
      * Loop through the txs of a block and update useful shield data
      * @param {{txs: String[], height: Number}} blockJson - Json of the block outputted from any PIVX node
      */
@@ -78,7 +83,7 @@ export class PIVXShielding {
      * Adds a transaction to the tree. Decrypts notes and stores nullifiers
      * @param {String} hex - transaction hex
      */
-    addTransaction(hex: string): Promise<void>;
+    addTransaction(hex: string, decryptOnly?: boolean): Promise<any>;
     /**
      * Remove the Shield Notes that match the nullifiers given in input
      * @param {Array<String>} blockJson - Array of nullifiers
@@ -89,16 +94,21 @@ export class PIVXShielding {
      */
     getBalance(): any;
     /**
+     * Return number of pending satoshis of the account
+     */
+    getPendingBalance(): any;
+    /**
      * Creates a transaction, sending `amount` satoshis to the address
-     * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool, utxos: UTXO[]?}} target
+     * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool, utxos: UTXO[]?, transparentChangeAddress: String?}} target
      * @returns {{hex: String, spentUTXOs: UTXO[]}}
      */
-    createTransaction({ address, amount, blockHeight, useShieldInputs, utxos, }: {
+    createTransaction({ address, amount, blockHeight, useShieldInputs, utxos, transparentChangeAddress, }: {
         address: string;
         amount: number;
         blockHeight: number;
         useShieldInputs: bool;
         utxos: UTXO[] | null;
+        transparentChangeAddress: string | null;
     }): {
         hex: string;
         spentUTXOs: UTXO[];

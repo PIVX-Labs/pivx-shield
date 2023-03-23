@@ -349,9 +349,7 @@ pub async fn create_transaction_internal(
     };
 
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid Amount")?;
-    let change_address =
-        decode_payment_address(network.hrp_sapling_payment_address(), change_address)
-            .map_err(|_| "Failed to decode change address")?;
+
     if to_address.starts_with(network.hrp_sapling_payment_address()) {
         let to_address = decode_payment_address(network.hrp_sapling_payment_address(), to_address)
             .map_err(|_| "Failed to decode sending address")?;
@@ -369,11 +367,24 @@ pub async fn create_transaction_internal(
             .add_transparent_output(&to_address, amount)
             .map_err(|_| "Failed to add output")?;
     }
-
-    builder
-        .add_sapling_output(None, change_address, change, MemoBytes::empty())
-        .map_err(|_| "Failed to add change")?;
-
+    if change_address.starts_with(network.hrp_sapling_payment_address()) {
+        let change_address =
+            decode_payment_address(network.hrp_sapling_payment_address(), change_address)
+                .map_err(|_| "Failed to decode shield change address")?;
+        builder
+            .add_sapling_output(None, change_address, change, MemoBytes::empty())
+            .map_err(|_| "Failed to add shield change")?;
+    } else {
+        let change_address = decode_transparent_address(
+            &network.b58_pubkey_address_prefix(),
+            &network.b58_script_address_prefix(),
+            change_address,
+        )?
+        .ok_or("Failed to decode change transparent address")?;
+        builder
+            .add_transparent_output(&change_address, change)
+            .map_err(|_| "Failed to add transparent change")?;
+    }
     prove_transaction(builder, nullifiers, fee).await
 }
 
