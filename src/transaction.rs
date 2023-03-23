@@ -1,7 +1,5 @@
 pub use crate::keys::decode_extsk;
 pub use pivx_client_backend::decrypt_transaction;
-pub use pivx_client_backend::encoding::decode_payment_address;
-use pivx_client_backend::encoding::decode_transparent_address;
 pub use pivx_client_backend::keys::UnifiedFullViewingKey;
 use pivx_primitives::consensus::Network;
 pub use pivx_primitives::consensus::Parameters;
