@@ -13,7 +13,6 @@ multicore = ["pivx_proofs/multicore", "wasm-bindgen-rayon"]
 
 [dependencies]
 lazy_static = "1.4.0"
-rayon = "1.5"
 async_once = "0.2.6"
 sha256 = "1.1.2"
 getrandom = { version = "0.2", features = ["js"] }
@@ -34,14 +33,10 @@ hex = "0.4.3"
 # code size when deploying.
 console_error_panic_hook = { version = "0.1.6", optional = true }
 
-# `wee_alloc` is a tiny allocator for wasm that is only ~1K in code size
-# compared to the default allocator's ~10K. It is slower than the default
-# allocator, however.
-wee_alloc = { version = "0.4.5", optional = true }
-rand_core = "0.6.4"
 secp256k1 = "0.21"
 either = "1.8.1"
 wasm-bindgen-rayon = { version = "1.0.3", optional = true }
+rand_core = "0.6.4"
 
 [dev-dependencies]
 tokio = { version = "1.26.0", features = ["full"] } 
@@ -49,7 +44,9 @@ wasm-bindgen-test = "0.3.13"
 
 [profile.release]
 # Tell `rustc` to optimize for small code size.
-opt-level = "s"
+opt-level = 3
+lto = true
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = false
+wasm-opt = true
+
