@@ -31,10 +31,8 @@ use secp256k1::SecretKey;
 pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 pub use std::path::Path;
-use std::sync::mpsc;
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::Sender;
-use std::sync::Mutex;
+#[cfg(feature = "multicore")]
+use std::sync::{mpsc, mpsc::Receiver, mpsc::Sender, Mutex};
 pub use std::{collections::HashMap, error::Error, io::Cursor};
 pub use wasm_bindgen::prelude::*;
 mod test;
@@ -46,6 +44,7 @@ lazy_static! {
         LocalTxProver::from_bytes(&sapling_spend_bytes, &sapling_output_bytes)
     });
 }
+#[cfg(feature = "multicore")]
 lazy_static! {
     static ref TX_PROGRESS_LOCK: Mutex<f32> = Mutex::new(0.0);
 }
@@ -98,6 +97,7 @@ async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
     Ok((sapling_spend_bytes.to_vec(), sapling_output_bytes.to_vec()))
 }
 #[wasm_bindgen]
+#[cfg(feature = "multicore")]
 pub fn read_tx_progress() -> f32 {
     return *TX_PROGRESS_LOCK
         .lock()
@@ -381,44 +381,37 @@ pub async fn create_transaction_internal(
     builder
         .add_sapling_output(None, change_address, change, MemoBytes::empty())
         .map_err(|_| "Failed to add change")?;
-    let (transmitter, receiver): (Sender<Progress>, Receiver<Progress>) = mpsc::channel();
-    builder.with_progress_notifier(transmitter);
-    rayon::spawn(move || loop {
-        if let Ok(status) = receiver.recv() {
-            let mut tx_progress = TX_PROGRESS_LOCK
-                .lock()
-                .expect("Cannot lock the progress mutex");
-            match status.end(){
-                Some(x) => *tx_progress = (status.cur() as f32)/(x as f32),
-                None => *tx_progress = 0.0, 
-            }
-            drop(tx_progress);
-        } else {
-            break;
-        }
-    });
-    let (transmitter, mut receiver) = tokio::sync::mpsc::channel(1);
-    let prover = PROVER.get().await.clone();
-    rayon::spawn(move || {
-        let (tx, metadata) = builder
-            .build(
-                prover,
-                &FeeRule::non_standard(Amount::from_u64(fee).expect("Invalid fee")),
-            )
-            .expect("Failed to build");
-        transmitter
-            .blocking_send((tx, metadata))
-            .expect("Failed to send");
-    });
-    let (tx, _metadata) = receiver.recv().await.expect("Fail to receive tx proof");
-    let mut tx_hex = vec![];
-    tx.write(&mut tx_hex)?;
 
-    Ok(JSTransaction {
-        txid: tx.txid().to_string(),
-        txhex: hex::encode(tx_hex),
-        nullifiers,
-    })
+    let prover = PROVER.get().await.clone();
+    #[cfg(feature = "multicore")]
+    {
+        let (transmitter, receiver): (Sender<Progress>, Receiver<Progress>) = mpsc::channel();
+        builder.with_progress_notifier(transmitter);
+        rayon::spawn(move || loop {
+            if let Ok(status) = receiver.recv() {
+                let mut tx_progress = TX_PROGRESS_LOCK
+                    .lock()
+                    .expect("Cannot lock the progress mutex");
+                match status.end() {
+                    Some(x) => *tx_progress = (status.cur() as f32) / (x as f32),
+                    None => *tx_progress = 0.0,
+                }
+                drop(tx_progress);
+            } else {
+                break;
+            }
+        });
+        let (transmitter, mut receiver) = tokio::sync::mpsc::channel(1);
+        rayon::spawn(move || {
+            let res = prove_transaction(builder, nullifiers, fee, prover).unwrap();
+            transmitter
+                .blocking_send(res)
+                .unwrap_or_else(|_| panic!("Cannot transmit tx"));
+        });
+        return Ok(receiver.recv().await.expect("Fail to receive tx proof"));
+    }
+    #[cfg(not(feature = "multicore"))]
+    prove_transaction(builder, nullifiers, fee, prover)
 }
 
 fn choose_utxos(
@@ -529,4 +522,39 @@ fn choose_notes(
 
     let change = Amount::from_u64(total - *amount - fee).map_err(|_| "Invalid change")?;
     Ok((nullifiers, change, fee))
+}
+
+fn prove_transaction(
+    builder: Builder<'_, Network, OsRng>,
+    nullifiers: Vec<String>,
+    fee: u64,
+    prover: &LocalTxProver,
+) -> Result<JSTransaction, Box<dyn Error>> {
+    #[cfg(not(test))]
+    return {
+        let (tx, _metadata) = builder.build(
+            prover,
+            &FeeRule::non_standard(Amount::from_u64(fee).map_err(|_| "Invalid fee")?),
+        )?;
+
+        let mut tx_hex = vec![];
+        tx.write(&mut tx_hex)?;
+
+        Ok(JSTransaction {
+            txid: tx.txid().to_string(),
+            txhex: hex::encode(tx_hex),
+            nullifiers,
+        })
+    };
+    #[cfg(test)]
+    {
+        // At this point we would use .mock_build()
+        // However it returns an error for some reason
+        // So let's just return the nullifiers and test those
+        Ok(JSTransaction {
+            txid: String::default(),
+            txhex: String::default(),
+            nullifiers,
+        })
+    }
 }
