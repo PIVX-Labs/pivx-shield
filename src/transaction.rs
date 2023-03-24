@@ -47,7 +47,7 @@ lazy_static! {
     });
 }
 lazy_static! {
-    static ref TX_PROGRESS_LOCK: Mutex<u32> = Mutex::new(0);
+    static ref TX_PROGRESS_LOCK: Mutex<f32> = Mutex::new(0.0);
 }
 fn fee_calculator(
     transparent_input_count: u64,
@@ -98,7 +98,7 @@ async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
     Ok((sapling_spend_bytes.to_vec(), sapling_output_bytes.to_vec()))
 }
 #[wasm_bindgen]
-pub fn read_tx_progress() -> u32 {
+pub fn read_tx_progress() -> f32 {
     return *TX_PROGRESS_LOCK
         .lock()
         .expect("Cannot lock the tx progress mutex");
@@ -358,7 +358,6 @@ pub async fn create_transaction_internal(
             sapling_output_count,
         )?,
     };
-
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid Amount")?;
     let to_address = decode_generic_address(network, to_address)?;
     match to_address {
@@ -389,11 +388,11 @@ pub async fn create_transaction_internal(
             let mut tx_progress = TX_PROGRESS_LOCK
                 .lock()
                 .expect("Cannot lock the progress mutex");
-            *tx_progress = status.cur();
-            drop(tx_progress);
-            if status.end() == Some(0) {
-                break;
+            match status.end(){
+                Some(x) => *tx_progress = (status.cur() as f32)/(x as f32),
+                None => *tx_progress = 0.0, 
             }
+            drop(tx_progress);
         } else {
             break;
         }
