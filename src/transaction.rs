@@ -1,7 +1,5 @@
 pub use crate::keys::decode_extsk;
 pub use pivx_client_backend::decrypt_transaction;
-pub use pivx_client_backend::encoding::decode_payment_address;
-use pivx_client_backend::encoding::decode_transparent_address;
 pub use pivx_client_backend::keys::UnifiedFullViewingKey;
 use pivx_primitives::consensus::Network;
 pub use pivx_primitives::consensus::Parameters;
@@ -12,6 +10,8 @@ pub use pivx_primitives::memo::MemoBytes;
 pub use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
 pub use pivx_primitives::sapling::PaymentAddress;
 
+use crate::keys::decode_generic_address;
+use crate::keys::GenericAddress;
 use async_once::AsyncOnce;
 pub use either::Either;
 use lazy_static::lazy_static;
@@ -349,31 +349,24 @@ pub async fn create_transaction_internal(
     };
 
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid Amount")?;
-    let change_address =
-        decode_payment_address(network.hrp_sapling_payment_address(), change_address)
-            .map_err(|_| "Failed to decode change address")?;
-    if to_address.starts_with(network.hrp_sapling_payment_address()) {
-        let to_address = decode_payment_address(network.hrp_sapling_payment_address(), to_address)
-            .map_err(|_| "Failed to decode sending address")?;
-        builder
-            .add_sapling_output(None, to_address, amount, MemoBytes::empty())
-            .map_err(|_| "Failed to add output")?;
-    } else {
-        let to_address = decode_transparent_address(
-            &network.b58_pubkey_address_prefix(),
-            &network.b58_script_address_prefix(),
-            to_address,
-        )?
-        .ok_or("Failed to decode transparent address")?;
-        builder
-            .add_transparent_output(&to_address, amount)
-            .map_err(|_| "Failed to add output")?;
+    let to_address = decode_generic_address(network, to_address)?;
+    match to_address {
+        GenericAddress::Transparent(x) => builder
+            .add_transparent_output(&x, amount)
+            .map_err(|_| "Failed to add output")?,
+        GenericAddress::Shield(x) => builder
+            .add_sapling_output(None, x, amount, MemoBytes::empty())
+            .map_err(|_| "Failed to add output")?,
     }
-
-    builder
-        .add_sapling_output(None, change_address, change, MemoBytes::empty())
-        .map_err(|_| "Failed to add change")?;
-
+    let change_address = decode_generic_address(network, change_address)?;
+    match change_address {
+        GenericAddress::Transparent(x) => builder
+            .add_transparent_output(&x, change)
+            .map_err(|_| "Failed to add transparent change")?,
+        GenericAddress::Shield(x) => builder
+            .add_sapling_output(None, x, change, MemoBytes::empty())
+            .map_err(|_| "Failed to add shield change")?,
+    }
     prove_transaction(builder, nullifiers, fee).await
 }
 

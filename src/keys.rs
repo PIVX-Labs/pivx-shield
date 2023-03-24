@@ -9,8 +9,12 @@ use pivx_primitives::zip32::AccountId;
 use pivx_primitives::zip32::DiversifierIndex;
 
 use pivx_client_backend::encoding;
+use pivx_client_backend::encoding::decode_payment_address;
+use pivx_client_backend::encoding::decode_transparent_address;
 use pivx_client_backend::keys::sapling;
-
+use pivx_primitives::consensus::Network;
+use pivx_primitives::legacy::TransparentAddress;
+use std::error::Error;
 // Data needed to generate an extended spending key
 #[derive(Serialize, Deserialize)]
 pub struct JSExtendedSpendingKeySerData {
@@ -19,6 +23,29 @@ pub struct JSExtendedSpendingKeySerData {
     pub account_index: u32,
 }
 
+pub enum GenericAddress {
+    Shield(PaymentAddress),
+    Transparent(TransparentAddress),
+}
+
+pub fn decode_generic_address(
+    network: Network,
+    enc_addr: &str,
+) -> Result<GenericAddress, Box<dyn Error>> {
+    if enc_addr.starts_with(network.hrp_sapling_payment_address()) {
+        let to_address = decode_payment_address(network.hrp_sapling_payment_address(), enc_addr)
+            .map_err(|_| "Failed to decode sending address")?;
+        Ok(GenericAddress::Shield(to_address))
+    } else {
+        let to_address = decode_transparent_address(
+            &network.b58_pubkey_address_prefix(),
+            &network.b58_script_address_prefix(),
+            enc_addr,
+        )?
+        .ok_or("Failed to decode transparent address")?;
+        Ok(GenericAddress::Transparent(to_address))
+    }
+}
 pub fn decode_extsk(enc_extsk: &str, is_testnet: bool) -> ExtendedSpendingKey {
     let enc_str: &str = if is_testnet {
         TEST_NETWORK.hrp_sapling_extended_spending_key()
