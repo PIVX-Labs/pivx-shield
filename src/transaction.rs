@@ -378,10 +378,6 @@ pub async fn create_transaction_internal(
             .map_err(|_| "Failed to add shield change")?,
     }
 
-    builder
-        .add_sapling_output(None, change_address, change, MemoBytes::empty())
-        .map_err(|_| "Failed to add change")?;
-
     let prover = PROVER.get().await.clone();
     #[cfg(feature = "multicore")]
     {
