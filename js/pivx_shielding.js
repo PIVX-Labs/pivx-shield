@@ -149,6 +149,24 @@ export class PIVXShielding {
     this.initWorker();
   }
 
+  async save() {
+    let { address, _ } = await this.callWorker(
+      "generate_default_payment_address",
+      this.extsk,
+      this.isTestNet
+    );
+
+    return new ShieldDB({
+      sanityAddress: address,
+      coinType: 1,
+      accountIndex: 0,
+      nHeight: this.lastProcessedBlock,
+      commitmentTree: this.commitmentTree,
+      diversifierIndex: this.diversifierIndex,
+      unspentNotes: this.unspentNotes,
+    });
+  }
+
   /**
    * Loop through the txs of a block and update useful shield data
    * @param {{txs: String[], height: Number}} blockJson - Json of the block outputted from any PIVX node
@@ -351,5 +369,35 @@ export class UTXO {
     this.amount = amount;
     this.private_key = privateKey ? bs58.decode(privateKey).slice(1, 33) : null;
     this.script = script;
+  }
+}
+
+export class ShieldDB {
+  /**
+   * Add a transparent UTXO, along with its private key
+   * @param {Object} o - Options
+   * @param {String} o.sanityAddress - A sanity sapling shield address
+   * @param {Number} o.coinType - number representing the coin type, 1 represents testnet
+   * @param {Number} o.accountIndex - index of the account that you want to generate
+   * @param {String} o.commitmentTree - Hex encoded commitment tree
+   * @param {Uint8Array} o.diversifierIndex - Diversifier index of the last generated address
+   * @param {[Note, String][]} o.unspentNotes - Array of notes, corresponding witness
+   */
+  constructor({
+    sanityAddress,
+    coinType,
+    accountIndex,
+    nHeight,
+    commitmentTree,
+    diversifierIndex,
+    unspentNotes,
+  }) {
+    this.sanityAddress = sanityAddress;
+    this.diversifierIndex = diversifierIndex;
+    this.coinType = coinType;
+    this.accountIndex = accountIndex;
+    this.lastProcessedBlock = nHeight;
+    this.commitmentTree = commitmentTree;
+    this.unspentNotes = unspentNotes;
   }
 }
