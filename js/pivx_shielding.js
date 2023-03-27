@@ -86,6 +86,7 @@ export class PIVXShielding {
     if (data) {
       let shieldDB = JSON.parse(data);
       if (await pivxShielding.load(shieldDB)) {
+        console.log("Successfully read database!");
         readFromData = true;
       }
     }
@@ -168,7 +169,7 @@ export class PIVXShielding {
 
     return new ShieldDB({
       sanityAddress: address,
-      nHeight: this.lastProcessedBlock,
+      lastProcessedBlock: this.lastProcessedBlock,
       commitmentTree: this.commitmentTree,
       diversifierIndex: this.diversifierIndex,
       unspentNotes: this.unspentNotes,
@@ -190,7 +191,7 @@ export class PIVXShielding {
     }
     this.commitmentTree = shieldDB.commitmentTree;
     this.unspentNotes = shieldDB.unspentNotes;
-    this.lastProcessedBlock = shieldDB.nHeight;
+    this.lastProcessedBlock = shieldDB.lastProcessedBlock;
     this.diversifierIndex = shieldDB.diversifierIndex;
     return true;
   }
@@ -404,20 +405,21 @@ export class ShieldDB {
    * Add a transparent UTXO, along with its private key
    * @param {Object} o - Options
    * @param {String} o.sanityAddress - A sanity sapling shield address
+   * @param {Number} o.lastProcessedBlock - Last processed block in blockchain
    * @param {String} o.commitmentTree - Hex encoded commitment tree
    * @param {Uint8Array} o.diversifierIndex - Diversifier index of the last generated address
    * @param {[Note, String][]} o.unspentNotes - Array of notes, corresponding witness
    */
   constructor({
     sanityAddress,
-    nHeight,
+    lastProcessedBlock,
     commitmentTree,
     diversifierIndex,
     unspentNotes,
   }) {
     this.sanityAddress = sanityAddress;
     this.diversifierIndex = diversifierIndex;
-    this.lastProcessedBlock = nHeight;
+    this.lastProcessedBlock = lastProcessedBlock;
     this.commitmentTree = commitmentTree;
     this.unspentNotes = unspentNotes;
   }
