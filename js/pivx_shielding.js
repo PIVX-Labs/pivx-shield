@@ -25,6 +25,7 @@ export class PIVXShielding {
   /**
    * Creates a PIVXShielding object
    * @param {Object} o - options
+   * @param {String?} o.data - ShieldDB data string in JSON format.
    * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
    * @param {String?} o.extendedSpendingKey - Extended Spending Key.
    * @param {Number} o.blockHeight - number representing the block height of creation of the wallet
@@ -33,6 +34,7 @@ export class PIVXShielding {
    * @param {Boolean} o.loadSaplingData - if you want to load sapling parameters on creation, by deafult is set to true
    */
   static async create({
+    data,
     seed,
     extendedSpendingKey,
     blockHeight,
@@ -80,14 +82,22 @@ export class PIVXShielding {
       );
       pivxShielding.extsk = extendedSpendingKey;
     }
-
-    const [effectiveHeight, commitmentTree] = await pivxShielding.callWorker(
-      "get_closest_checkpoint",
-      blockHeight,
-      isTestNet
-    );
-    pivxShielding.lastProcessedBlock = effectiveHeight;
-    pivxShielding.commitmentTree = commitmentTree;
+    let readFromData = false;
+    if (data) {
+      let shieldDB = JSON.parse(data);
+      if (await pivxShielding.load(shieldDB)) {
+        readFromData = true;
+      }
+    }
+    if (!readFromData) {
+      const [effectiveHeight, commitmentTree] = await pivxShielding.callWorker(
+        "get_closest_checkpoint",
+        blockHeight,
+        isTestNet
+      );
+      pivxShielding.lastProcessedBlock = effectiveHeight;
+      pivxShielding.commitmentTree = commitmentTree;
+    }
     return pivxShielding;
   }
 
@@ -148,7 +158,7 @@ export class PIVXShielding {
 
     this.initWorker();
   }
-
+  //Save your shield data
   async save() {
     let { address, _ } = await this.callWorker(
       "generate_default_payment_address",
@@ -158,8 +168,6 @@ export class PIVXShielding {
 
     return new ShieldDB({
       sanityAddress: address,
-      coinType: 1,
-      accountIndex: 0,
       nHeight: this.lastProcessedBlock,
       commitmentTree: this.commitmentTree,
       diversifierIndex: this.diversifierIndex,
@@ -167,6 +175,25 @@ export class PIVXShielding {
     });
   }
 
+  /**
+   * Load shieldWorker from a shieldDB
+   * @param {ShieldDB} shieldDB - shield database
+   */
+  async load(shieldDB) {
+    const { defAddress, _ } = await this.callWorker(
+      "generate_default_payment_address",
+      this.extsk,
+      this.isTestNet
+    );
+    if (defAddress != shieldDB.defAddress) {
+      return false;
+    }
+    this.commitmentTree = shieldDB.commitmentTree;
+    this.unspentNotes = shieldDB.unspentNotes;
+    this.lastProcessedBlock = shieldDB.nHeight;
+    this.diversifierIndex = shieldDB.diversifierIndex;
+    return true;
+  }
   /**
    * Loop through the txs of a block and update useful shield data
    * @param {{txs: String[], height: Number}} blockJson - Json of the block outputted from any PIVX node
@@ -377,16 +404,12 @@ export class ShieldDB {
    * Add a transparent UTXO, along with its private key
    * @param {Object} o - Options
    * @param {String} o.sanityAddress - A sanity sapling shield address
-   * @param {Number} o.coinType - number representing the coin type, 1 represents testnet
-   * @param {Number} o.accountIndex - index of the account that you want to generate
    * @param {String} o.commitmentTree - Hex encoded commitment tree
    * @param {Uint8Array} o.diversifierIndex - Diversifier index of the last generated address
    * @param {[Note, String][]} o.unspentNotes - Array of notes, corresponding witness
    */
   constructor({
     sanityAddress,
-    coinType,
-    accountIndex,
     nHeight,
     commitmentTree,
     diversifierIndex,
@@ -394,8 +417,6 @@ export class ShieldDB {
   }) {
     this.sanityAddress = sanityAddress;
     this.diversifierIndex = diversifierIndex;
-    this.coinType = coinType;
-    this.accountIndex = accountIndex;
     this.lastProcessedBlock = nHeight;
     this.commitmentTree = commitmentTree;
     this.unspentNotes = unspentNotes;

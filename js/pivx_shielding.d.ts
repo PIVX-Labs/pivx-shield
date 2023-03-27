@@ -2,6 +2,7 @@ export class PIVXShielding {
     /**
      * Creates a PIVXShielding object
      * @param {Object} o - options
+     * @param {String?} o.data - ShieldDB data string in JSON format.
      * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
      * @param {String?} o.extendedSpendingKey - Extended Spending Key.
      * @param {Number} o.blockHeight - number representing the block height of creation of the wallet
@@ -9,7 +10,8 @@ export class PIVXShielding {
      * @param {Number} o.accountIndex - index of the account that you want to generate, by default is set to 0
      * @param {Boolean} o.loadSaplingData - if you want to load sapling parameters on creation, by deafult is set to true
      */
-    static create({ seed, extendedSpendingKey, blockHeight, coinType, accountIndex, loadSaplingData, }: {
+    static create({ data, seed, extendedSpendingKey, blockHeight, coinType, accountIndex, loadSaplingData, }: {
+        data: string | null;
         seed: Array<number> | null;
         extendedSpendingKey: string | null;
         blockHeight: number;
@@ -72,6 +74,11 @@ export class PIVXShielding {
      */
     private pendingUnspentNotes;
     save(): Promise<ShieldDB>;
+    /**
+     * Load shieldWorker from a shieldDB
+     * @param {ShieldDB} shieldDB - shield database
+     */
+    load(shieldDB: ShieldDB): Promise<boolean>;
     /**
      * Loop through the txs of a block and update useful shield data
      * @param {{txs: String[], height: Number}} blockJson - Json of the block outputted from any PIVX node
@@ -179,24 +186,18 @@ export class ShieldDB {
      * Add a transparent UTXO, along with its private key
      * @param {Object} o - Options
      * @param {String} o.sanityAddress - A sanity sapling shield address
-     * @param {Number} o.coinType - number representing the coin type, 1 represents testnet
-     * @param {Number} o.accountIndex - index of the account that you want to generate
      * @param {String} o.commitmentTree - Hex encoded commitment tree
      * @param {Uint8Array} o.diversifierIndex - Diversifier index of the last generated address
      * @param {[Note, String][]} o.unspentNotes - Array of notes, corresponding witness
      */
-    constructor({ sanityAddress, coinType, accountIndex, nHeight, commitmentTree, diversifierIndex, unspentNotes, }: {
+    constructor({ sanityAddress, nHeight, commitmentTree, diversifierIndex, unspentNotes, }: {
         sanityAddress: string;
-        coinType: number;
-        accountIndex: number;
         commitmentTree: string;
         diversifierIndex: Uint8Array;
         unspentNotes: [Note, string][];
     });
     sanityAddress: string;
     diversifierIndex: Uint8Array;
-    coinType: number;
-    accountIndex: number;
     lastProcessedBlock: any;
     commitmentTree: string;
     unspentNotes: [Note, string][];
