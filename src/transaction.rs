@@ -32,8 +32,9 @@ pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 pub use std::path::Path;
 #[cfg(feature = "multicore")]
-use std::sync::{mpsc, mpsc::Receiver, mpsc::Sender, Mutex};
+use std::sync::Mutex;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
+use tokio::{join, sync::mpsc::Receiver, sync::mpsc::Sender};
 pub use wasm_bindgen::prelude::*;
 mod test;
 
@@ -102,6 +103,12 @@ pub fn read_tx_progress() -> f32 {
     return *TX_PROGRESS_LOCK
         .lock()
         .expect("Cannot lock the tx progress mutex");
+}
+pub fn set_tx_status(val: f32) {
+    let mut tx_progress = TX_PROGRESS_LOCK
+        .lock()
+        .expect("Cannot lock the progress mutex");
+    *tx_progress = val;
 }
 #[wasm_bindgen]
 pub async fn load_prover() -> bool {
@@ -381,22 +388,27 @@ pub async fn create_transaction_internal(
     let prover = PROVER.get().await.clone();
     #[cfg(feature = "multicore")]
     {
-        let (transmitter, receiver): (Sender<Progress>, Receiver<Progress>) = mpsc::channel();
+        set_tx_status(0.0);
+        let (transmitter, mut receiver): (Sender<Progress>, Receiver<Progress>) =
+            tokio::sync::mpsc::channel(1);
         builder.with_progress_notifier(transmitter);
-        rayon::spawn(move || loop {
-            if let Ok(status) = receiver.recv() {
-                let mut tx_progress = TX_PROGRESS_LOCK
-                    .lock()
-                    .expect("Cannot lock the progress mutex");
-                match status.end() {
-                    Some(x) => *tx_progress = (status.cur() as f32) / (x as f32),
-                    None => *tx_progress = 0.0,
+        let tx_progress_future = async {
+            loop {
+                if let Some(status) = receiver.recv().await {
+                    let mut tx_progress = TX_PROGRESS_LOCK
+                        .lock()
+                        .expect("Cannot lock the progress mutex");
+                    match status.end() {
+                        Some(x) => *tx_progress = (status.cur() as f32) / (x as f32),
+                        None => *tx_progress = 0.0,
+                    }
+                    drop(tx_progress);
+                } else {
+                    break;
                 }
-                drop(tx_progress);
-            } else {
-                break;
             }
-        });
+        };
+
         let (transmitter, mut receiver) = tokio::sync::mpsc::channel(1);
         rayon::spawn(move || {
             let res = prove_transaction(builder, nullifiers, fee, prover).unwrap();
@@ -404,7 +416,8 @@ pub async fn create_transaction_internal(
                 .blocking_send(res)
                 .unwrap_or_else(|_| panic!("Cannot transmit tx"));
         });
-        return Ok(receiver.recv().await.expect("Fail to receive tx proof"));
+        let (_, res) = join!(tx_progress_future, receiver.recv());
+        return Ok(res.expect("Fail to receive tx proof"));
     }
     #[cfg(not(feature = "multicore"))]
     prove_transaction(builder, nullifiers, fee, prover)

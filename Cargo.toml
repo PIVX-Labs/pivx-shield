@@ -12,7 +12,7 @@ default = ["console_error_panic_hook"]
 multicore = ["pivx_proofs/multicore", "wasm-bindgen-rayon"]
 
 [dependencies]
-tokio = { version = "1.26.0", features = ["sync"] }
+tokio = { version = "1.26.0", default-features = false, features = ["sync", "macros"] }
 rayon = "1.7.0"
 lazy_static = "1.4.0"
 async_once = "0.2.6"
