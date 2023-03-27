@@ -3,12 +3,12 @@ pub use pivx_client_backend::decrypt_transaction;
 pub use pivx_client_backend::keys::UnifiedFullViewingKey;
 use pivx_primitives::consensus::Network;
 pub use pivx_primitives::consensus::Parameters;
-
 pub use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
 use pivx_primitives::legacy::Script;
 pub use pivx_primitives::memo::MemoBytes;
 pub use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
 pub use pivx_primitives::sapling::PaymentAddress;
+pub use pivx_primitives::transaction::builder::Progress;
 
 use crate::keys::decode_generic_address;
 use crate::keys::GenericAddress;
@@ -31,7 +31,11 @@ use secp256k1::SecretKey;
 pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 pub use std::path::Path;
+#[cfg(feature = "multicore")]
+use std::sync::Mutex;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
+#[cfg(feature = "multicore")]
+use tokio::{join, sync::mpsc::Receiver, sync::mpsc::Sender};
 pub use wasm_bindgen::prelude::*;
 mod test;
 
@@ -42,7 +46,10 @@ lazy_static! {
         LocalTxProver::from_bytes(&sapling_spend_bytes, &sapling_output_bytes)
     });
 }
-
+#[cfg(feature = "multicore")]
+lazy_static! {
+    static ref TX_PROGRESS_LOCK: Mutex<f32> = Mutex::new(0.0);
+}
 fn fee_calculator(
     transparent_input_count: u64,
     transparent_output_count: u64,
@@ -91,7 +98,20 @@ async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
 
     Ok((sapling_spend_bytes.to_vec(), sapling_output_bytes.to_vec()))
 }
-
+#[wasm_bindgen]
+#[cfg(feature = "multicore")]
+pub fn read_tx_progress() -> f32 {
+    return *TX_PROGRESS_LOCK
+        .lock()
+        .expect("Cannot lock the tx progress mutex");
+}
+#[cfg(feature = "multicore")]
+pub fn set_tx_status(val: f32) {
+    let mut tx_progress = TX_PROGRESS_LOCK
+        .lock()
+        .expect("Cannot lock the progress mutex");
+    *tx_progress = val;
+}
 #[wasm_bindgen]
 pub async fn load_prover() -> bool {
     PROVER.get().await;
@@ -347,7 +367,6 @@ pub async fn create_transaction_internal(
             sapling_output_count,
         )?,
     };
-
     let amount = Amount::from_u64(amount).map_err(|_| "Invalid Amount")?;
     let to_address = decode_generic_address(network, to_address)?;
     match to_address {
@@ -367,7 +386,42 @@ pub async fn create_transaction_internal(
             .add_sapling_output(None, x, change, MemoBytes::empty())
             .map_err(|_| "Failed to add shield change")?,
     }
-    prove_transaction(builder, nullifiers, fee).await
+
+    let prover = PROVER.get().await.clone();
+    #[cfg(feature = "multicore")]
+    {
+        let (transmitter, mut receiver): (Sender<Progress>, Receiver<Progress>) =
+            tokio::sync::mpsc::channel(1);
+        builder.with_progress_notifier(transmitter);
+        let tx_progress_future = async {
+            loop {
+                if let Some(status) = receiver.recv().await {
+                    let mut tx_progress = TX_PROGRESS_LOCK
+                        .lock()
+                        .expect("Cannot lock the progress mutex");
+                    match status.end() {
+                        Some(x) => *tx_progress = (status.cur() as f32) / (x as f32),
+                        None => *tx_progress = 0.0,
+                    }
+                } else {
+                    set_tx_status(0.0);
+                    break;
+                }
+            }
+        };
+
+        let (transmitter, mut receiver) = tokio::sync::mpsc::channel(1);
+        rayon::spawn(move || {
+            let res = prove_transaction(builder, nullifiers, fee, prover).unwrap();
+            transmitter
+                .blocking_send(res)
+                .unwrap_or_else(|_| panic!("Cannot transmit tx"));
+        });
+        let (_, res) = join!(tx_progress_future, receiver.recv());
+        return Ok(res.ok_or("Fail to receive tx proof")?);
+    }
+    #[cfg(not(feature = "multicore"))]
+    prove_transaction(builder, nullifiers, fee, prover)
 }
 
 fn choose_utxos(
@@ -480,15 +534,16 @@ fn choose_notes(
     Ok((nullifiers, change, fee))
 }
 
-async fn prove_transaction(
+fn prove_transaction(
     builder: Builder<'_, Network, OsRng>,
     nullifiers: Vec<String>,
     fee: u64,
+    prover: &LocalTxProver,
 ) -> Result<JSTransaction, Box<dyn Error>> {
     #[cfg(not(test))]
     return {
         let (tx, _metadata) = builder.build(
-            PROVER.get().await,
+            prover,
             &FeeRule::non_standard(Amount::from_u64(fee).map_err(|_| "Invalid fee")?),
         )?;
 
