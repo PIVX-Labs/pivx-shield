@@ -388,7 +388,6 @@ pub async fn create_transaction_internal(
     let prover = PROVER.get().await.clone();
     #[cfg(feature = "multicore")]
     {
-        set_tx_status(0.0);
         let (transmitter, mut receiver): (Sender<Progress>, Receiver<Progress>) =
             tokio::sync::mpsc::channel(1);
         builder.with_progress_notifier(transmitter);
@@ -402,8 +401,8 @@ pub async fn create_transaction_internal(
                         Some(x) => *tx_progress = (status.cur() as f32) / (x as f32),
                         None => *tx_progress = 0.0,
                     }
-                    drop(tx_progress);
                 } else {
+                    set_tx_status(0.0);
                     break;
                 }
             }
@@ -417,7 +416,7 @@ pub async fn create_transaction_internal(
                 .unwrap_or_else(|_| panic!("Cannot transmit tx"));
         });
         let (_, res) = join!(tx_progress_future, receiver.recv());
-        return Ok(res.expect("Fail to receive tx proof"));
+        return Ok(res.ok_or("Fail to receive tx proof")?);
     }
     #[cfg(not(feature = "multicore"))]
     prove_transaction(builder, nullifiers, fee, prover)
