@@ -34,6 +34,7 @@ pub use std::path::Path;
 #[cfg(feature = "multicore")]
 use std::sync::Mutex;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
+#[cfg(feature = "multicore")]
 use tokio::{join, sync::mpsc::Receiver, sync::mpsc::Sender};
 pub use wasm_bindgen::prelude::*;
 mod test;
@@ -104,6 +105,7 @@ pub fn read_tx_progress() -> f32 {
         .lock()
         .expect("Cannot lock the tx progress mutex");
 }
+#[cfg(feature = "multicore")]
 pub fn set_tx_status(val: f32) {
     let mut tx_progress = TX_PROGRESS_LOCK
         .lock()
