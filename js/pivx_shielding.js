@@ -182,12 +182,12 @@ export class PIVXShielding {
    * @param {ShieldData} shieldData - shield data
    */
   async load(shieldData) {
-    const { defAddress, _ } = await this.callWorker(
+    const { address, _ } = await this.callWorker(
       "generate_default_payment_address",
       this.extsk,
       this.isTestNet
     );
-    if (defAddress != shieldData.defAddress) {
+    if (address != shieldData.defaultAddress) {
       return false;
     }
     this.commitmentTree = shieldData.commitmentTree;
