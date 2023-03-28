@@ -468,7 +468,7 @@ fn choose_utxos(
         }
     }
     if total < *amount + fee {
-        if total > *amount {
+        if total >= *amount {
             *amount -= fee;
         } else {
             Err("Not enough balance")?;
@@ -523,7 +523,7 @@ fn choose_notes(
     }
 
     if total < *amount + fee {
-        if total > *amount {
+        if total >= *amount {
             *amount -= fee
         } else {
             Err("Not enough balance")?;
