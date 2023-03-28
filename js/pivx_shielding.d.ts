@@ -2,6 +2,7 @@ export class PIVXShielding {
     /**
      * Creates a PIVXShielding object
      * @param {Object} o - options
+     * @param {String?} o.data - ShieldData string in JSON format.
      * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
      * @param {String?} o.extendedSpendingKey - Extended Spending Key.
      * @param {Number} o.blockHeight - number representing the block height of creation of the wallet
@@ -9,7 +10,8 @@ export class PIVXShielding {
      * @param {Number} o.accountIndex - index of the account that you want to generate, by default is set to 0
      * @param {Boolean} o.loadSaplingData - if you want to load sapling parameters on creation, by deafult is set to true
      */
-    static create({ seed, extendedSpendingKey, blockHeight, coinType, accountIndex, loadSaplingData, }: {
+    static create({ data, seed, extendedSpendingKey, blockHeight, coinType, accountIndex, loadSaplingData, }: {
+        data: string | null;
         seed: Array<number> | null;
         extendedSpendingKey: string | null;
         blockHeight: number;
@@ -71,6 +73,12 @@ export class PIVXShielding {
      * @private
      */
     private pendingUnspentNotes;
+    save(): Promise<string>;
+    /**
+     * Load shieldWorker from a shieldData
+     * @param {ShieldData} shieldData - shield data
+     */
+    load(shieldData: ShieldData): Promise<boolean>;
     /**
      * Loop through the txs of a block and update useful shield data
      * @param {{txs: String[], height: Number}} blockJson - Json of the block outputted from any PIVX node
@@ -113,6 +121,7 @@ export class PIVXShielding {
         hex: string;
         spentUTXOs: UTXO[];
     };
+    getTxStatus(): Promise<any>;
     /**
      * Signals the class that a transaction was sent successfully
      * and the notes can be marked as spent
@@ -172,3 +181,27 @@ export class UTXO {
     private_key: any;
     script: Uint8Array;
 }
+declare class ShieldData {
+    /**
+     * Add a transparent UTXO, along with its private key
+     * @param {Object} o - Options
+     * @param {String} o.defaultAddress - Default shield address used for double check that data matches the seed
+     * @param {Number} o.lastProcessedBlock - Last processed block in blockchain
+     * @param {String} o.commitmentTree - Hex encoded commitment tree
+     * @param {Uint8Array} o.diversifierIndex - Diversifier index of the last generated address
+     * @param {[Note, String][]} o.unspentNotes - Array of notes, corresponding witness
+     */
+    constructor({ defaultAddress, lastProcessedBlock, commitmentTree, diversifierIndex, unspentNotes, }: {
+        defaultAddress: string;
+        lastProcessedBlock: number;
+        commitmentTree: string;
+        diversifierIndex: Uint8Array;
+        unspentNotes: [Note, string][];
+    });
+    defaultAddress: string;
+    diversifierIndex: Uint8Array;
+    lastProcessedBlock: number;
+    commitmentTree: string;
+    unspentNotes: [Note, string][];
+}
+export {};

@@ -94,7 +94,17 @@ struct NewAddress {
     pub address: String,
     pub diversifier_index: Vec<u8>,
 }
-
+//Generate the deafult address of a given encoded extended full viewing key
+#[wasm_bindgen]
+pub fn generate_default_payment_address(enc_extsk: String, is_testnet: bool) -> JsValue {
+    let extsk = decode_extsk(&enc_extsk, is_testnet);
+    let (def_index, def_address) = extsk.to_diversifiable_full_viewing_key().default_address();
+    serde_wasm_bindgen::to_value(&NewAddress {
+        address: encode_payment_address(&def_address, is_testnet),
+        diversifier_index: def_index.0.to_vec(),
+    })
+    .expect("Failed to encode")
+}
 // Generate the n_address-th valid payment address given the encoded extended full viewing key and a starting index
 #[wasm_bindgen]
 pub fn generate_next_shielding_payment_address(
