@@ -2,7 +2,7 @@ export class PIVXShielding {
     /**
      * Creates a PIVXShielding object
      * @param {Object} o - options
-     * @param {String?} o.data - ShieldDB data string in JSON format.
+     * @param {String?} o.data - ShieldData string in JSON format.
      * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
      * @param {String?} o.extendedSpendingKey - Extended Spending Key.
      * @param {Number} o.blockHeight - number representing the block height of creation of the wallet
@@ -73,12 +73,12 @@ export class PIVXShielding {
      * @private
      */
     private pendingUnspentNotes;
-    save(): Promise<ShieldDB>;
+    save(): Promise<string>;
     /**
-     * Load shieldWorker from a shieldDB
-     * @param {ShieldDB} shieldDB - shield database
+     * Load shieldWorker from a shieldData
+     * @param {ShieldData} shieldData - shield data
      */
-    load(shieldDB: ShieldDB): Promise<boolean>;
+    load(shieldData: ShieldData): Promise<boolean>;
     /**
      * Loop through the txs of a block and update useful shield data
      * @param {{txs: String[], height: Number}} blockJson - Json of the block outputted from any PIVX node
@@ -181,24 +181,27 @@ export class UTXO {
     private_key: any;
     script: Uint8Array;
 }
-export class ShieldDB {
+declare class ShieldData {
     /**
      * Add a transparent UTXO, along with its private key
      * @param {Object} o - Options
-     * @param {String} o.sanityAddress - A sanity sapling shield address
+     * @param {String} o.defaultAddress - Default shield address used for double check that data matches the seed
+     * @param {Number} o.lastProcessedBlock - Last processed block in blockchain
      * @param {String} o.commitmentTree - Hex encoded commitment tree
      * @param {Uint8Array} o.diversifierIndex - Diversifier index of the last generated address
      * @param {[Note, String][]} o.unspentNotes - Array of notes, corresponding witness
      */
-    constructor({ sanityAddress, nHeight, commitmentTree, diversifierIndex, unspentNotes, }: {
-        sanityAddress: string;
+    constructor({ defaultAddress, lastProcessedBlock, commitmentTree, diversifierIndex, unspentNotes, }: {
+        defaultAddress: string;
+        lastProcessedBlock: number;
         commitmentTree: string;
         diversifierIndex: Uint8Array;
         unspentNotes: [Note, string][];
     });
-    sanityAddress: string;
+    defaultAddress: string;
     diversifierIndex: Uint8Array;
-    lastProcessedBlock: any;
+    lastProcessedBlock: number;
     commitmentTree: string;
     unspentNotes: [Note, string][];
 }
+export {};

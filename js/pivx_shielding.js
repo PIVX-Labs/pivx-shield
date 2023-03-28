@@ -25,7 +25,7 @@ export class PIVXShielding {
   /**
    * Creates a PIVXShielding object
    * @param {Object} o - options
-   * @param {String?} o.data - ShieldDB data string in JSON format.
+   * @param {String?} o.data - ShieldData string in JSON format.
    * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
    * @param {String?} o.extendedSpendingKey - Extended Spending Key.
    * @param {Number} o.blockHeight - number representing the block height of creation of the wallet
@@ -84,9 +84,8 @@ export class PIVXShielding {
     }
     let readFromData = false;
     if (data) {
-      let shieldDB = JSON.parse(data);
-      if (await pivxShielding.load(shieldDB)) {
-        console.log("Successfully read database!");
+      const shieldData = JSON.parse(data);
+      if (await pivxShielding.load(shieldData)) {
         readFromData = true;
       }
     }
@@ -161,38 +160,40 @@ export class PIVXShielding {
   }
   //Save your shield data
   async save() {
-    let { address, _ } = await this.callWorker(
+    const { address, _ } = await this.callWorker(
       "generate_default_payment_address",
       this.extsk,
       this.isTestNet
     );
 
-    return new ShieldDB({
-      sanityAddress: address,
-      lastProcessedBlock: this.lastProcessedBlock,
-      commitmentTree: this.commitmentTree,
-      diversifierIndex: this.diversifierIndex,
-      unspentNotes: this.unspentNotes,
-    });
+    return JSON.stringify(
+      new ShieldData({
+        defaultAddress: address,
+        lastProcessedBlock: this.lastProcessedBlock,
+        commitmentTree: this.commitmentTree,
+        diversifierIndex: this.diversifierIndex,
+        unspentNotes: this.unspentNotes,
+      })
+    );
   }
 
   /**
-   * Load shieldWorker from a shieldDB
-   * @param {ShieldDB} shieldDB - shield database
+   * Load shieldWorker from a shieldData
+   * @param {ShieldData} shieldData - shield data
    */
-  async load(shieldDB) {
+  async load(shieldData) {
     const { defAddress, _ } = await this.callWorker(
       "generate_default_payment_address",
       this.extsk,
       this.isTestNet
     );
-    if (defAddress != shieldDB.defAddress) {
+    if (defAddress != shieldData.defAddress) {
       return false;
     }
-    this.commitmentTree = shieldDB.commitmentTree;
-    this.unspentNotes = shieldDB.unspentNotes;
-    this.lastProcessedBlock = shieldDB.lastProcessedBlock;
-    this.diversifierIndex = shieldDB.diversifierIndex;
+    this.commitmentTree = shieldData.commitmentTree;
+    this.unspentNotes = shieldData.unspentNotes;
+    this.lastProcessedBlock = shieldData.lastProcessedBlock;
+    this.diversifierIndex = shieldData.diversifierIndex;
     return true;
   }
   /**
@@ -400,24 +401,24 @@ export class UTXO {
   }
 }
 
-export class ShieldDB {
+class ShieldData {
   /**
    * Add a transparent UTXO, along with its private key
    * @param {Object} o - Options
-   * @param {String} o.sanityAddress - A sanity sapling shield address
+   * @param {String} o.defaultAddress - Default shield address used for double check that data matches the seed
    * @param {Number} o.lastProcessedBlock - Last processed block in blockchain
    * @param {String} o.commitmentTree - Hex encoded commitment tree
    * @param {Uint8Array} o.diversifierIndex - Diversifier index of the last generated address
    * @param {[Note, String][]} o.unspentNotes - Array of notes, corresponding witness
    */
   constructor({
-    sanityAddress,
+    defaultAddress,
     lastProcessedBlock,
     commitmentTree,
     diversifierIndex,
     unspentNotes,
   }) {
-    this.sanityAddress = sanityAddress;
+    this.defaultAddress = defaultAddress;
     this.diversifierIndex = diversifierIndex;
     this.lastProcessedBlock = lastProcessedBlock;
     this.commitmentTree = commitmentTree;
