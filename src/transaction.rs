@@ -101,10 +101,18 @@ async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
 #[wasm_bindgen]
 #[cfg(feature = "multicore")]
 pub fn read_tx_progress() -> f32 {
-    return *TX_PROGRESS_LOCK
+    *TX_PROGRESS_LOCK
         .lock()
-        .expect("Cannot lock the tx progress mutex");
+        .expect("Cannot lock the tx progress mutex")
 }
+
+#[wasm_bindgen]
+#[cfg(not (feature = "multicore"))]
+pub fn read_tx_progress() -> f32 {
+    0.0
+}
+
+
 #[cfg(feature = "multicore")]
 pub fn set_tx_status(val: f32) {
     let mut tx_progress = TX_PROGRESS_LOCK
