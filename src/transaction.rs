@@ -141,15 +141,15 @@ pub fn handle_transaction(
     enc_extsk: &str,
     is_testnet: bool,
     comp_notes: JsValue,
-) -> JsValue {
+) -> Result<JsValue, JsValue> {
     let buff =
-        Cursor::new(hex::decode(tree_hex).expect("Cannot decode commitment tree from hexadecimal"));
-    let mut tree = CommitmentTree::<Node>::read(buff).expect("Cannot decode commitment tree!");
-    let extsk = decode_extsk(enc_extsk, is_testnet);
+        Cursor::new(hex::decode(tree_hex).map_err(|_| "Cannot decode commitment tree from hexadecimal")?);
+    let mut tree = CommitmentTree::<Node>::read(buff).map_err(|_| "Cannot decode commitment tree!")?;
+    let extsk = decode_extsk(enc_extsk, is_testnet).map_err(|e| e.to_string())?;
     let key = UnifiedFullViewingKey::new(Some(extsk.to_diversifiable_full_viewing_key()), None)
-        .expect("Failed to create unified full viewing key");
+        .ok_or("Failed to create unified full viewing key")?;
     let comp_note: Vec<(Note, String)> =
-        serde_wasm_bindgen::from_value(comp_notes).expect("Failed to decode notes");
+        serde_wasm_bindgen::from_value(comp_notes)?;
     let mut comp_note = comp_note
         .into_iter()
         .map(|(note, witness)| {
@@ -158,14 +158,14 @@ pub fn handle_transaction(
         })
         .collect::<Vec<_>>();
     let nullifiers = handle_transaction_internal(&mut tree, tx, &key, true, &mut comp_note)
-        .expect("Cannot decode tx");
+        .map_err(|_| "Cannot decode tx")?;
     let mut ser_comp_note: Vec<(Note, String)> = vec![];
     let mut ser_nullifiers: Vec<String> = vec![];
     for (note, witness) in comp_note.iter() {
         let mut buff = Vec::new();
         witness
             .write(&mut buff)
-            .expect("Cannot write witness to buffer");
+            .map_err(|_| "Cannot write witness to buffer")?;
         ser_comp_note.push((note.clone(), hex::encode(&buff)));
     }
 
@@ -174,14 +174,14 @@ pub fn handle_transaction(
     }
 
     let mut buff = Vec::new();
-    tree.write(&mut buff).expect("Cannot write tree to buffer");
+    tree.write(&mut buff).map_err(|_| "Cannot write tree to buffer")?;
 
     let res: JSTxSaplingData = JSTxSaplingData {
         decrypted_notes: ser_comp_note,
         nullifiers: ser_nullifiers,
         commitment_tree: hex::encode(buff),
     };
-    serde_wasm_bindgen::to_value(&res).expect("Cannot serialize tx output")
+    Ok(serde_wasm_bindgen::to_value(&res).map_err(|_| "Cannot serialize tx output")?)
 }
 
 //add a tx to a given commitment tree and the return a witness to each output
@@ -236,25 +236,25 @@ pub fn remove_spent_notes(
     nullifiers_data: JsValue,
     enc_extsk: String,
     is_testnet: bool,
-) -> JsValue {
+) -> Result<JsValue, JsValue> {
     let hex_notes: Vec<(Note, String)> =
-        serde_wasm_bindgen::from_value(notes_data).expect("Cannot deserialize notes");
+        serde_wasm_bindgen::from_value(notes_data)?;
     let nullifiers: Vec<String> =
-        serde_wasm_bindgen::from_value(nullifiers_data).expect("Cannot deserialize nullifiers");
+        serde_wasm_bindgen::from_value(nullifiers_data)?;
     let mut notes: Vec<(Note, String, MerklePath<Node>)> = vec![];
     let mut unspent_notes: Vec<(Note, String)> = vec![];
 
-    let extsk = decode_extsk(&enc_extsk, is_testnet);
+    let extsk = decode_extsk(&enc_extsk, is_testnet).map_err(|e| e.to_string())?;
     let nullif_key = extsk
         .to_diversifiable_full_viewing_key()
         .to_nk(Scope::External);
 
     for (note, witness) in hex_notes.iter() {
-        let buff = Cursor::new(hex::decode(witness).expect("Cannot decode witness"));
+        let buff = Cursor::new(hex::decode(witness).map_err(|_| "Cannot decode witness")?);
         let path = IncrementalWitness::<Node>::read(buff)
-            .expect("Cannot read witness from buffer")
+            .map_err(|_| "Cannot read witness from buffer")?
             .path()
-            .expect("Cannot find witness path");
+            .ok_or("Cannot find witness path")?;
         notes.push((note.clone(), witness.clone(), path));
     }
     for (note, witness, path) in notes.iter() {
@@ -263,7 +263,7 @@ pub fn remove_spent_notes(
             unspent_notes.push((note.clone(), witness.clone()));
         };
     }
-    serde_wasm_bindgen::to_value(&unspent_notes).expect("Cannot serialize unspent notes")
+    Ok(serde_wasm_bindgen::to_value(&unspent_notes)?)
 }
 
 #[derive(Serialize, Deserialize)]
@@ -295,7 +295,7 @@ pub struct JSTxOptions {
 }
 
 #[wasm_bindgen]
-pub async fn create_transaction(options: JsValue) -> JsValue {
+pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
     let JSTxOptions {
         notes,
         extsk,
@@ -305,12 +305,12 @@ pub async fn create_transaction(options: JsValue) -> JsValue {
         block_height,
         is_testnet,
         utxos,
-    } = serde_wasm_bindgen::from_value::<JSTxOptions>(options).expect("Cannot deserialize notes");
+    } = serde_wasm_bindgen::from_value::<JSTxOptions>(options)?;
     assert!(
         !(notes.is_some() && utxos.is_some()),
         "Notes and UTXOs were both provided"
     );
-    let extsk = decode_extsk(&extsk, is_testnet);
+    let extsk = decode_extsk(&extsk, is_testnet).map_err(|e| e.to_string())?;
     let network = if is_testnet {
         Network::TestNetwork
     } else {
@@ -334,9 +334,9 @@ pub async fn create_transaction(options: JsValue) -> JsValue {
         BlockHeight::from_u32(block_height),
         network,
     )
-    .await
-    .expect("Failed to create tx");
-    serde_wasm_bindgen::to_value(&result).expect("Cannot serialize transaction")
+    .await.map_err(|e| e.to_string())?;
+
+    Ok(serde_wasm_bindgen::to_value(&result)?)
 }
 
 /// Create a transaction.
@@ -395,7 +395,7 @@ pub async fn create_transaction_internal(
             .map_err(|_| "Failed to add shield change")?,
     }
 
-    let prover = PROVER.get().await.clone();
+    let prover = PROVER.get().await;
     #[cfg(feature = "multicore")]
     {
         let (transmitter, mut receiver): (Sender<Progress>, Receiver<Progress>) =
