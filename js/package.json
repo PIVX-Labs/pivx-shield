@@ -15,11 +15,10 @@
     "comlink": "^4.4.1",
     "pivx-shield": "file:../pkg/",
     "pivx-shield-multicore": "file:../pkg_multicore",
-    "typescript": "^4.9.5",
     "uuid": "^9.0.0",
     "wasm-feature-detect": "^1.5.1"
   },
-   "collaborators": [
+  "collaborators": [
     "Duddino <duddino@duddino.com>",
     "Alessandro Rezzi <alessandrorezzi2000@gmail.com>"
   ],
@@ -27,5 +26,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/PIVX-Labs/pivx-shield"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.3"
   }
 }
