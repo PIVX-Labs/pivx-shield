@@ -1,7 +1,7 @@
 import bs58 from "bs58";
 import { v4 as genuuid } from "uuid";
 
-export class PIVXShielding {
+export class PIVXShield {
   initWorker() {
     this.promises = new Map();
     this.shieldWorker.onmessage = (msg) => {
@@ -23,7 +23,7 @@ export class PIVXShielding {
     });
   }
   /**
-   * Creates a PIVXShielding object
+   * Creates a PIVXShield object
    * @param {Object} o - options
    * @param {String?} o.data - ShieldData string in JSON format.
    * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
@@ -57,7 +57,7 @@ export class PIVXShielding {
 
     const isTestNet = coinType == 1 ? true : false;
 
-    const pivxShielding = new PIVXShielding(
+    const pivxShield = new PIVXShield(
       shieldWorker,
       extendedSpendingKey,
       isTestNet,
@@ -66,7 +66,7 @@ export class PIVXShielding {
     );
 
     if (loadSaplingData) {
-      if (!(await pivxShielding.loadSaplingProver())) {
+      if (!(await pivxShield.loadSaplingProver())) {
         throw new Error("Cannot load sapling data");
       }
     }
@@ -76,29 +76,29 @@ export class PIVXShielding {
         coin_type: coinType,
         account_index: accountIndex,
       };
-      extendedSpendingKey = await pivxShielding.callWorker(
+      extendedSpendingKey = await pivxShield.callWorker(
         "generate_extended_spending_key_from_seed",
         serData
       );
-      pivxShielding.extsk = extendedSpendingKey;
+      pivxShield.extsk = extendedSpendingKey;
     }
     let readFromData = false;
     if (data) {
       const shieldData = JSON.parse(data);
-      if (await pivxShielding.load(shieldData)) {
+      if (await pivxShield.load(shieldData)) {
         readFromData = true;
       }
     }
     if (!readFromData) {
-      const [effectiveHeight, commitmentTree] = await pivxShielding.callWorker(
+      const [effectiveHeight, commitmentTree] = await pivxShield.callWorker(
         "get_closest_checkpoint",
         blockHeight,
         isTestNet
       );
-      pivxShielding.lastProcessedBlock = effectiveHeight;
-      pivxShielding.commitmentTree = commitmentTree;
+      pivxShield.lastProcessedBlock = effectiveHeight;
+      pivxShield.commitmentTree = commitmentTree;
     }
-    return pivxShielding;
+    return pivxShield;
   }
 
   constructor(shieldWorker, extsk, isTestNet, nHeight, commitmentTree) {
@@ -256,7 +256,7 @@ export class PIVXShielding {
     );
   }
   /**
-   * Return number of shielded satoshis of the account
+   * Return number of shield satoshis of the account
    */
   getBalance() {
     return this.unspentNotes.reduce((acc, [note]) => acc + note.value, 0);
@@ -343,7 +343,7 @@ export class PIVXShielding {
   }
 
   /**
-   * @returns {String} new shielded address
+   * @returns {String} new shield address
    */
   async getNewAddress() {
     const { address, diversifier_index } = await this.callWorker(

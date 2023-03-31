@@ -1,6 +1,6 @@
-export class PIVXShielding {
+export class PIVXShield {
     /**
-     * Creates a PIVXShielding object
+     * Creates a PIVXShield object
      * @param {Object} o - options
      * @param {String?} o.data - ShieldData string in JSON format.
      * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
@@ -18,7 +18,7 @@ export class PIVXShielding {
         coinType: number;
         accountIndex: number;
         loadSaplingData: boolean;
-    }): Promise<PIVXShielding>;
+    }): Promise<PIVXShield>;
     constructor(shieldWorker: any, extsk: any, isTestNet: any, nHeight: any, commitmentTree: any);
     initWorker(): void;
     promises: any;
@@ -98,7 +98,7 @@ export class PIVXShielding {
      */
     removeSpentNotes(nullifiers: any): Promise<void>;
     /**
-     * Return number of shielded satoshis of the account
+     * Return number of shield satoshis of the account
      */
     getBalance(): any;
     /**
@@ -137,7 +137,7 @@ export class PIVXShielding {
      */
     discardTransaction(txid: string): void;
     /**
-     * @returns {String} new shielded address
+     * @returns {String} new shield address
      */
     getNewAddress(): string;
     loadSaplingProver(): Promise<any>;
