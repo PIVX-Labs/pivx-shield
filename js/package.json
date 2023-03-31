@@ -1,5 +1,5 @@
 {
-  "name": "pivx-shield-js",
+  "name": "pivx-shield",
   "version": "1.0.0",
   "description": "WASM library for interoperation with the PIVX Shield sapling protocol.",
   "main": "pivx_shield.js",
