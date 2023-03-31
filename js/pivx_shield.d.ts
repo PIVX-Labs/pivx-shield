@@ -1,6 +1,6 @@
-export class PIVXShielding {
+export class PIVXShield {
     /**
-     * Creates a PIVXShielding object
+     * Creates a PIVXShield object
      * @param {Object} o - options
      * @param {String?} o.data - ShieldData string in JSON format.
      * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
@@ -18,7 +18,7 @@ export class PIVXShielding {
         coinType: number;
         accountIndex: number;
         loadSaplingData: boolean;
-    }): Promise<PIVXShielding>;
+    }): Promise<PIVXShield>;
     constructor(shieldWorker: any, extsk: any, isTestNet: any, nHeight: any, commitmentTree: any);
     initWorker(): void;
     promises: any;

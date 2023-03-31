@@ -1,20 +1,20 @@
 {
-  "name": "pivx-shielding-js",
+  "name": "pivx-shield-js",
   "version": "1.0.0",
   "description": "",
-  "main": "pivx_shielding.js",
+  "main": "pivx_shield.js",
   "files": [
     "start_worker.js"
   ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc --allowJs -d --emitDeclarationOnly pivx_shielding.js"
+    "build": "tsc --allowJs -d --emitDeclarationOnly pivx_shield.js"
   },
   "dependencies": {
     "bs58": "^5.0.0",
     "comlink": "^4.4.1",
-    "pivx-shielding": "file:../pkg/",
-    "pivx-shielding-multicore": "file:../pkg_multicore",
+    "pivx-shield": "file:../pkg/",
+    "pivx-shield-multicore": "file:../pkg_multicore",
     "typescript": "^4.9.5",
     "uuid": "^9.0.0",
     "wasm-feature-detect": "^1.5.1"
