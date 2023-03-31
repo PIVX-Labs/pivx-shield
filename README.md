@@ -27,7 +27,7 @@ import { PIVXShield as Shield } from "pivx-shield-js";
 
 // This is an array of 64 random bytes, usually derived from a Seed phrase
 // For instance with https://github.com/bitcoinjs/bip39
-let youSeed = ...;
+const yourSeed = ...;
 const shield = await Shield.create({
 	seed: yourSeed,
 	// This should be the block of birth of the wallet.
