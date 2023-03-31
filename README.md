@@ -34,7 +34,7 @@ for (let block = shield.getLastSyncedBlock();  block < current_block_height; blo
 console.log(shield.getBalance());
 console.log(await shield.getNewAddress());
 
-const hex = await shield.createTransaction({
+const { hex } = await shield.createTransaction({
 	// Transparent addresses are supported as well
 	address: "ptestsapling1s23gkjxqnedkptdvp8qn3m57z0meq2530qxwe8w7x9sdz05xg5yu8wh7534memvjwqntw8mzr3w",
 	// 50 tPIV
