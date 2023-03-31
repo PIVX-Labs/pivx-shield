@@ -9,15 +9,8 @@ It supports:
 
 ## Getting started
 ### Compile
-To compile the non-multicore version,
-```bash
-wasm-pack build --target web
-```
-To compile with multicore support enabled, make sure the nightly compiler and `rust-src` are installed. Version 2023-03-28 is recommended.
-```bash
-./build_multicore.sh
-```
-This will generate the two versions in `pkg/` and `pkg_multicore/`. Then, run `npm i /path/to/this/project/js/`, to install the javascript wrapper in your project.
+To compile, run `make`.
+This will generate two versions: `pkg/` and `pkg_multicore/`. Then, run `npm i /path/to/this/project/js/`, to install the javascript wrapper in your project.
 
 ### Examples
 

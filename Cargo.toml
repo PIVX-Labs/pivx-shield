@@ -1,8 +1,11 @@
 [package]
-name = "pivx-shield"
-version = "0.1.0"
+name = "pivx-shield-rust"
+version = "1.0.0"
 authors = ["Duddino <duddino@duddino.com>", "Alessandro Rezzi <alessandrorezzi2000@gmail.com>"]
 edition = "2021"
+description = "WASM library for interoperation with the PIVX Shield sapling protocol."
+repository = "https://github.com/PIVX-Labs/pivx-shield"
+license = "MIT"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
