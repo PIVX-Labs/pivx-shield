@@ -1,14 +1,19 @@
 .PHONY: all
-all: pkg pkg_multicore js/pivx_shield.d.ts
+all: pkg pkg_multicore js/pivx_shield.d.ts js/README.md
 
 pkg: src/
 	wasm-pack build --target web
+	cp wrong-package.md pkg/README.md
 
 pkg_multicore: src/
 	rustup override set nightly-2023-03-28;
 	wasm-pack build --target web --out-dir pkg_multicore -- --config "build-std = [\"panic_abort\", \"std\"]" --features="multicore";
 	sed -i 's/pivx-shield-rust/pivx-shield-rust-multicore/' pkg_multicore/package.json
 	rustup override set stable;
+	cp wrong-package.md pkg_multicore/README.md
+
+js/README.md:
+	cp README.md js/
 
 js/pivx_shield.d.ts: js/pivx_shield.js js/node_modules
 	cd js/; \
