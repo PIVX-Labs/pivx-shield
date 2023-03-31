@@ -256,7 +256,7 @@ export class PIVXShield {
     );
   }
   /**
-   * Return number of shielded satoshis of the account
+   * Return number of shield satoshis of the account
    */
   getBalance() {
     return this.unspentNotes.reduce((acc, [note]) => acc + note.value, 0);
@@ -343,7 +343,7 @@ export class PIVXShield {
   }
 
   /**
-   * @returns {String} new shielded address
+   * @returns {String} new shield address
    */
   async getNewAddress() {
     const { address, diversifier_index } = await this.callWorker(

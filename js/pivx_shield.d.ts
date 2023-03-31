@@ -98,7 +98,7 @@ export class PIVXShield {
      */
     removeSpentNotes(nullifiers: any): Promise<void>;
     /**
-     * Return number of shielded satoshis of the account
+     * Return number of shield satoshis of the account
      */
     getBalance(): any;
     /**
@@ -137,7 +137,7 @@ export class PIVXShield {
      */
     discardTransaction(txid: string): void;
     /**
-     * @returns {String} new shielded address
+     * @returns {String} new shield address
      */
     getNewAddress(): string;
     loadSaplingProver(): Promise<any>;
