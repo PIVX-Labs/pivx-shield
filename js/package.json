@@ -16,6 +16,7 @@
     "pivx-shielding": "file:../pkg/",
     "pivx-shielding-multicore": "file:../pkg_multicore",
     "typescript": "^4.9.5",
+    "uuid": "^9.0.0",
     "wasm-feature-detect": "^1.5.1"
   },
   "author": "",
