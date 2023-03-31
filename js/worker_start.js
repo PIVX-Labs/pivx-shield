@@ -3,11 +3,11 @@ let shieldMan = null;
 
 const start = async () => {
   if (await threads()) {
-    shieldMan = await import("pivx-shielding-multicore");
+    shieldMan = await import("pivx-shield-rust-multicore");
     await shieldMan.default();
     await shieldMan.initThreadPool(navigator.hardwareConcurrency);
   } else {
-    shieldMan = await import("pivx-shielding");
+    shieldMan = await import("pivx-shield-rust");
     await shieldMan.default();
   }
   self.postMessage("done");
