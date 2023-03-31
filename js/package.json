@@ -1,7 +1,7 @@
 {
   "name": "pivx-shield-js",
   "version": "1.0.0",
-  "description": "",
+  "description": "WASM library for interoperation with the PIVX Shield sapling protocol.",
   "main": "pivx_shield.js",
   "files": [
     "start_worker.js"
@@ -19,6 +19,13 @@
     "uuid": "^9.0.0",
     "wasm-feature-detect": "^1.5.1"
   },
-  "author": "",
-  "license": "ISC"
+   "collaborators": [
+    "Duddino <duddino@duddino.com>",
+    "Alessandro Rezzi <alessandrorezzi2000@gmail.com>"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PIVX-Labs/pivx-shield"
+  }
 }
