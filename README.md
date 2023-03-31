@@ -42,6 +42,7 @@ const shield = await Shield.create({
 for (let block = shield.getLastSyncedBlock();  block < current_block_height; block++)  {
 	// You need to provide a function that fetches block information
 	// For example with a simple GET request to a blockbook explorer
+	// https://testnet.rockdev.org/api/v2/block/1164637
 	const blockData = your_fetch_block_function(block);
 	await shield.handleBlock(blockData);
 }
