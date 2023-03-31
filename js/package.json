@@ -13,8 +13,8 @@
   "dependencies": {
     "bs58": "^5.0.0",
     "comlink": "^4.4.1",
-    "pivx-shield": "file:../pkg/",
-    "pivx-shield-multicore": "file:../pkg_multicore",
+    "pivx-shield": "1.0.0",
+    "pivx-shield-multicore": "1.0.0",
     "uuid": "^9.0.0",
     "wasm-feature-detect": "^1.5.1"
   },
