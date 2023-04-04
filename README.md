@@ -8,15 +8,17 @@ It supports:
 - The ability to save and load the sync status
 
 ## Getting started
-### Compile
-To compile, run `make`.
-This will generate two versions: `pkg/` and `pkg_multicore/`. Then, run `npm i /path/to/this/project/js/`, to install the javascript wrapper in your project.
+### Install
+To install the library, simply run `npm i pivx-shield`. Then import it in your project with
+```js
+import { PIVXShield } from "pivx-shield";
+```
 
 ### Examples
 
 To use the class, it must first be synced with:
 ```js
-import { PIVXShield as Shield } from "pivx-shield-js";
+import { PIVXShield as Shield } from "pivx-shield";
 
 // This is an array of 64 random bytes, usually derived from a Seed phrase
 // For instance with https://github.com/bitcoinjs/bip39
@@ -69,7 +71,7 @@ console.log(shield.getLastSyncedBlock());
 To create a transaction,
 
 ```js
-import { PIVXShield as Shield } from "pivx-shield-js";
+import { PIVXShield as Shield } from "pivx-shield";
 
 const shield = await Shield.create({...});
 // Sync omitted
@@ -95,11 +97,14 @@ if (txid) {
 }
 ```
 
-
 ## Contribuiting
 
 PRs are welcome!
 Write tests and then make sure to run `cargo fmt` before submitting
+
+### Compile
+To compile, run `make`.
+This will generate two versions: `pkg/` and `pkg_multicore/`. Then, run `npm i /path/to/this/project/js/`, to install the javascript wrapper in your project.
 
 ## License
 
