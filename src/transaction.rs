@@ -385,14 +385,17 @@ pub async fn create_transaction_internal(
             .add_sapling_output(None, x, amount, MemoBytes::empty())
             .map_err(|_| "Failed to add output")?,
     }
-    let change_address = decode_generic_address(network, change_address)?;
-    match change_address {
-        GenericAddress::Transparent(x) => builder
-            .add_transparent_output(&x, change)
-            .map_err(|_| "Failed to add transparent change")?,
-        GenericAddress::Shield(x) => builder
-            .add_sapling_output(None, x, change, MemoBytes::empty())
-            .map_err(|_| "Failed to add shield change")?,
+    
+    if change.is_positive() {
+	let change_address = decode_generic_address(network, change_address)?;
+	match change_address {
+            GenericAddress::Transparent(x) => builder
+		.add_transparent_output(&x, change)
+		.map_err(|_| "Failed to add transparent change")?,
+            GenericAddress::Shield(x) => builder
+		.add_sapling_output(None, x, change, MemoBytes::empty())
+		.map_err(|_| "Failed to add shield change")?,
+	}
     }
 
     let prover = PROVER.get().await;
