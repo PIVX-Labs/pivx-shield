@@ -1,11 +1,12 @@
 {
   "name": "pivx-shield",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "WASM library for interoperation with the PIVX Shield sapling protocol.",
     "files": [
 	"*"
   ],
   "module": "pivx_shield.js",
+  "typings": "pivx_shield.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "tsc --allowJs -d --emitDeclarationOnly pivx_shield.js"
