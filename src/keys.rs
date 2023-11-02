@@ -129,11 +129,12 @@ struct NewAddress {
 //Generate the deafult address of a given encoded extended full viewing key
 #[wasm_bindgen]
 pub fn generate_default_payment_address(
-    enc_extsk: String,
+    enc_extfvk: String,
     is_testnet: bool,
 ) -> Result<JsValue, JsValue> {
-    let extsk = decode_extsk(&enc_extsk, is_testnet).map_err(|e| e.to_string())?;
-    let (def_index, def_address) = extsk.to_diversifiable_full_viewing_key().default_address();
+    let extfvk =
+        decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
+    let (def_index, def_address) = extfvk.to_diversifiable_full_viewing_key().default_address();
     Ok(serde_wasm_bindgen::to_value(&NewAddress {
         address: encode_payment_address(&def_address, is_testnet),
         diversifier_index: def_index.0.to_vec(),

@@ -28,7 +28,7 @@ export class PIVXShield {
    * @param {String?} o.data - ShieldData string in JSON format.
    * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
    * @param {String?} o.extendedSpendingKey - Extended Spending Key.
-   * @param {Strig?} o.extendedFullViewingKey - Full viewing key
+   * @param {String?} o.extendedFullViewingKey - Full viewing key
    * @param {Number} o.blockHeight - number representing the block height of creation of the wallet
    * @param {Number} o.coinType - number representing the coin type, 1 represents testnet
    * @param {Number} o.accountIndex - index of the account that you want to generate, by default is set to 0
@@ -200,7 +200,7 @@ export class PIVXShield {
   async save() {
     const { address, _ } = await this.callWorker(
       "generate_default_payment_address",
-      this.extsk,
+      this.extfvk,
       this.isTestNet,
     );
 
@@ -222,7 +222,7 @@ export class PIVXShield {
   async load(shieldData) {
     const { address, _ } = await this.callWorker(
       "generate_default_payment_address",
-      this.extsk,
+      this.extfvk,
       this.isTestNet,
     );
     if (address != shieldData.defaultAddress) {
