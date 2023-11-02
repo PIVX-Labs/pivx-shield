@@ -28,6 +28,7 @@ export class PIVXShield {
    * @param {String?} o.data - ShieldData string in JSON format.
    * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
    * @param {String?} o.extendedSpendingKey - Extended Spending Key.
+   * @param {Strig?} o.extendedFullViewingKey - Full viewing key
    * @param {Number} o.blockHeight - number representing the block height of creation of the wallet
    * @param {Number} o.coinType - number representing the coin type, 1 represents testnet
    * @param {Number} o.accountIndex - index of the account that you want to generate, by default is set to 0
@@ -37,17 +38,20 @@ export class PIVXShield {
     data,
     seed,
     extendedSpendingKey,
+    extendedFullViewingKey,
     blockHeight,
     coinType,
     accountIndex = 0,
     loadSaplingData = true,
   }) {
-    if (!extendedSpendingKey && !seed) {
-      throw new Error("One of seed or extendedSpendingKey must be provided");
+    if (!extendedSpendingKey && !seed && !extendedFullViewingKey) {
+      throw new Error(
+        "One of seed or extendedSpendingKey or extendedFullViewingKey must be provided",
+      );
     }
 
     const shieldWorker = new Worker(
-      new URL("worker_start.js", import.meta.url)
+      new URL("worker_start.js", import.meta.url),
     );
     await new Promise((res) => {
       shieldWorker.onmessage = (msg) => {
@@ -60,9 +64,10 @@ export class PIVXShield {
     const pivxShield = new PIVXShield(
       shieldWorker,
       extendedSpendingKey,
+      extendedFullViewingKey,
       isTestNet,
       null,
-      null
+      null,
     );
 
     if (loadSaplingData) {
@@ -70,7 +75,7 @@ export class PIVXShield {
         throw new Error("Cannot load sapling data");
       }
     }
-    if (!extendedSpendingKey) {
+    if (!extendedSpendingKey && !extendedFullViewingKey) {
       const serData = {
         seed: seed,
         coin_type: coinType,
@@ -78,9 +83,16 @@ export class PIVXShield {
       };
       extendedSpendingKey = await pivxShield.callWorker(
         "generate_extended_spending_key_from_seed",
-        serData
+        serData,
       );
       pivxShield.extsk = extendedSpendingKey;
+    }
+    if (extendedSpendingKey) {
+      pivxShield.extfvk = await pivxShield.callWorker(
+        "generate_extended_full_viewing_key",
+        pivxShield.extsk,
+        isTestNet,
+      );
     }
     let readFromData = false;
     if (data) {
@@ -93,7 +105,7 @@ export class PIVXShield {
       const [effectiveHeight, commitmentTree] = await pivxShield.callWorker(
         "get_closest_checkpoint",
         blockHeight,
-        isTestNet
+        isTestNet,
       );
       pivxShield.lastProcessedBlock = effectiveHeight;
       pivxShield.commitmentTree = commitmentTree;
@@ -101,7 +113,7 @@ export class PIVXShield {
     return pivxShield;
   }
 
-  constructor(shieldWorker, extsk, isTestNet, nHeight, commitmentTree) {
+  constructor(shieldWorker, extsk, extfvk, isTestNet, nHeight, commitmentTree) {
     /**
      * Webassembly object that holds Shield related functions
      * @private
@@ -113,6 +125,12 @@ export class PIVXShield {
      * @private
      */
     this.extsk = extsk;
+    /**
+     * Extended full viewing key
+     * @type {String}
+     * @private
+     */
+    this.extfvk = extfvk;
     /**
      * Diversifier index of the last generated address
      * @type {Uint8Array}
@@ -158,12 +176,32 @@ export class PIVXShield {
 
     this.initWorker();
   }
+
+  /**
+   * Load an extended spending key in order to have spending authority
+   * @param {String} enc_extsk - extended spending key
+   */
+  async loadExtendedSpendingKey(enc_extsk) {
+    if (this.extsk) {
+      throw new Error("A spending key is aready loaded");
+    }
+    const enc_extfvk = await this.callWorker(
+      "generate_extended_full_viewing_key",
+      enc_extsk,
+      this.isTestNet,
+    );
+    if (enc_extfvk !== this.extfvk) {
+      throw new Error("Extended full viewing keys do not match");
+    }
+    this.extsk = enc_extsk;
+  }
+
   //Save your shield data
   async save() {
     const { address, _ } = await this.callWorker(
       "generate_default_payment_address",
       this.extsk,
-      this.isTestNet
+      this.isTestNet,
     );
 
     return JSON.stringify(
@@ -173,7 +211,7 @@ export class PIVXShield {
         commitmentTree: this.commitmentTree,
         diversifierIndex: this.diversifierIndex,
         unspentNotes: this.unspentNotes,
-      })
+      }),
     );
   }
 
@@ -185,7 +223,7 @@ export class PIVXShield {
     const { address, _ } = await this.callWorker(
       "generate_default_payment_address",
       this.extsk,
-      this.isTestNet
+      this.isTestNet,
     );
     if (address != shieldData.defaultAddress) {
       return false;
@@ -203,7 +241,7 @@ export class PIVXShield {
   async handleBlock(blockJson) {
     if (this.lastProcessedBlock > blockJson.height) {
       throw new Error(
-        "Blocks must be processed in a monotonically increasing order!"
+        "Blocks must be processed in a monotonically increasing order!",
       );
     }
     for (const tx of blockJson.txs) {
@@ -221,16 +259,16 @@ export class PIVXShield {
       "handle_transaction",
       this.commitmentTree,
       hex,
-      this.extsk,
+      this.extfvk,
       this.isTestNet,
-      this.unspentNotes
+      this.unspentNotes,
     );
     if (decryptOnly) {
       return res.decrypted_notes.filter(
         (note) =>
           !this.unspentNotes.some(
-            (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0])
-          )
+            (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0]),
+          ),
       );
     } else {
       this.commitmentTree = res.commitment_tree;
@@ -251,8 +289,8 @@ export class PIVXShield {
       "remove_spent_notes",
       this.unspentNotes,
       nullifiers,
-      this.extsk,
-      this.isTestNet
+      this.extfvk,
+      this.isTestNet,
     );
   }
   /**
@@ -300,7 +338,7 @@ export class PIVXShield {
         amount,
         block_height: blockHeight,
         is_testnet: this.isTestNet,
-      }
+      },
     );
 
     if (useShieldInputs) {
@@ -350,7 +388,7 @@ export class PIVXShield {
       "generate_next_shielding_payment_address",
       this.extsk,
       this.diversifierIndex,
-      this.isTestNet
+      this.isTestNet,
     );
     this.diversifierIndex = diversifier_index;
     return address;
