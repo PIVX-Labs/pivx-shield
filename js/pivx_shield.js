@@ -322,6 +322,9 @@ export class PIVXShield {
     utxos,
     transparentChangeAddress,
   }) {
+    if (!this.extsk) {
+      throw new Error("You cannot create a transaction in view only mode!");
+    }
     if (!useShieldInputs && !transparentChangeAddress) {
       throw new Error("Change must have the same type of input used!");
     }
