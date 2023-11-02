@@ -386,7 +386,7 @@ export class PIVXShield {
   async getNewAddress() {
     const { address, diversifier_index } = await this.callWorker(
       "generate_next_shielding_payment_address",
-      this.extsk,
+      this.extfvk,
       this.diversifierIndex,
       this.isTestNet,
     );

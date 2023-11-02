@@ -142,11 +142,12 @@ pub fn generate_default_payment_address(
 // Generate the n_address-th valid payment address given the encoded extended full viewing key and a starting index
 #[wasm_bindgen]
 pub fn generate_next_shielding_payment_address(
-    enc_extsk: String,
+    enc_extfvk: String,
     diversifier_index: &[u8],
     is_testnet: bool,
 ) -> Result<JsValue, JsValue> {
-    let extsk = decode_extsk(&enc_extsk, is_testnet).map_err(|e| e.to_string())?;
+    let extfvk =
+        decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
     let mut diversifier_index = DiversifierIndex(
         diversifier_index
             .try_into()
@@ -155,7 +156,7 @@ pub fn generate_next_shielding_payment_address(
     diversifier_index
         .increment()
         .map_err(|_| "No valid indeces left")?;
-    let (new_index, address) = extsk
+    let (new_index, address) = extfvk
         .to_diversifiable_full_viewing_key()
         .find_address(diversifier_index)
         .ok_or("No valid indeces left")?; // There are so many valid addresses this should never happen
