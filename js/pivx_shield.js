@@ -44,10 +44,14 @@ export class PIVXShield {
     accountIndex = 0,
     loadSaplingData = true,
   }) {
-    if (!extendedSpendingKey && !seed && !extendedFullViewingKey) {
+    if (!extendedSpendingKey && !seed && !extendedFullViewingKey && !data) {
       throw new Error(
-        "One of seed or extendedSpendingKey or extendedFullViewingKey must be provided",
+        "At least one among seed, extendedSpendingKey, extendedFullViewingKey or backup data must be provided",
       );
+    }
+
+    if (extendedSpendingKey && seed) {
+      throw new Error("Don't provide both a seed and an extendedSpendingKey");
     }
 
     const shieldWorker = new Worker(
@@ -75,7 +79,7 @@ export class PIVXShield {
         throw new Error("Cannot load sapling data");
       }
     }
-    if (!extendedSpendingKey && !extendedFullViewingKey) {
+    if (seed) {
       const serData = {
         seed: seed,
         coin_type: coinType,
@@ -97,7 +101,7 @@ export class PIVXShield {
     let readFromData = false;
     if (data) {
       const shieldData = JSON.parse(data);
-      if (await pivxShield.load(shieldData)) {
+      if (pivxShield.load(shieldData)) {
         readFromData = true;
       }
     }
@@ -197,16 +201,10 @@ export class PIVXShield {
   }
 
   //Save your shield data
-  async save() {
-    const { address, _ } = await this.callWorker(
-      "generate_default_payment_address",
-      this.extfvk,
-      this.isTestNet,
-    );
-
+  save() {
     return JSON.stringify(
       new ShieldData({
-        defaultAddress: address,
+        extfvk: this.extfvk,
         lastProcessedBlock: this.lastProcessedBlock,
         commitmentTree: this.commitmentTree,
         diversifierIndex: this.diversifierIndex,
@@ -219,15 +217,11 @@ export class PIVXShield {
    * Load shieldWorker from a shieldData
    * @param {ShieldData} shieldData - shield data
    */
-  async load(shieldData) {
-    const { address, _ } = await this.callWorker(
-      "generate_default_payment_address",
-      this.extfvk,
-      this.isTestNet,
-    );
-    if (address != shieldData.defaultAddress) {
+  load(shieldData) {
+    if (this.extfvk && this.extfvk != shieldData.extfvk) {
       return false;
     }
+    this.extfvk = shieldData.extfvk;
     this.commitmentTree = shieldData.commitmentTree;
     this.unspentNotes = shieldData.unspentNotes;
     this.lastProcessedBlock = shieldData.lastProcessedBlock;
@@ -446,20 +440,20 @@ class ShieldData {
   /**
    * Add a transparent UTXO, along with its private key
    * @param {Object} o - Options
-   * @param {String} o.defaultAddress - Default shield address used for double check that data matches the seed
+   * @param {String} o.extfvk - Extended full viewing key
    * @param {Number} o.lastProcessedBlock - Last processed block in blockchain
    * @param {String} o.commitmentTree - Hex encoded commitment tree
    * @param {Uint8Array} o.diversifierIndex - Diversifier index of the last generated address
    * @param {[Note, String][]} o.unspentNotes - Array of notes, corresponding witness
    */
   constructor({
-    defaultAddress,
+    extfvk,
     lastProcessedBlock,
     commitmentTree,
     diversifierIndex,
     unspentNotes,
   }) {
-    this.defaultAddress = defaultAddress;
+    this.extfvk = extfvk;
     this.diversifierIndex = diversifierIndex;
     this.lastProcessedBlock = lastProcessedBlock;
     this.commitmentTree = commitmentTree;
