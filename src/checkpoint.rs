@@ -117,5 +117,8 @@ mod test {
 //Output the closest checkpoint to a given blockheight
 #[wasm_bindgen]
 pub fn get_closest_checkpoint(block_height: i32, is_testnet: bool) -> Result<JsValue, JsValue> {
-    Ok(serde_wasm_bindgen::to_value(&get_checkpoint(block_height, is_testnet))?)
+    Ok(serde_wasm_bindgen::to_value(&get_checkpoint(
+        block_height,
+        is_testnet,
+    ))?)
 }

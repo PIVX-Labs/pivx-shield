@@ -1,3 +1,4 @@
+pub use crate::keys::decode_extended_full_viewing_key;
 pub use crate::keys::decode_extsk;
 pub use pivx_client_backend::decrypt_transaction;
 pub use pivx_client_backend::keys::UnifiedFullViewingKey;
@@ -107,11 +108,10 @@ pub fn read_tx_progress() -> f32 {
 }
 
 #[wasm_bindgen]
-#[cfg(not (feature = "multicore"))]
+#[cfg(not(feature = "multicore"))]
 pub fn read_tx_progress() -> f32 {
     0.0
 }
-
 
 #[cfg(feature = "multicore")]
 pub fn set_tx_status(val: f32) {
@@ -138,18 +138,20 @@ pub struct JSTxSaplingData {
 pub fn handle_transaction(
     tree_hex: &str,
     tx: &str,
-    enc_extsk: &str,
+    enc_extfvk: &str,
     is_testnet: bool,
     comp_notes: JsValue,
 ) -> Result<JsValue, JsValue> {
-    let buff =
-        Cursor::new(hex::decode(tree_hex).map_err(|_| "Cannot decode commitment tree from hexadecimal")?);
-    let mut tree = CommitmentTree::<Node>::read(buff).map_err(|_| "Cannot decode commitment tree!")?;
-    let extsk = decode_extsk(enc_extsk, is_testnet).map_err(|e| e.to_string())?;
-    let key = UnifiedFullViewingKey::new(Some(extsk.to_diversifiable_full_viewing_key()), None)
+    let buff = Cursor::new(
+        hex::decode(tree_hex).map_err(|_| "Cannot decode commitment tree from hexadecimal")?,
+    );
+    let mut tree =
+        CommitmentTree::<Node>::read(buff).map_err(|_| "Cannot decode commitment tree!")?;
+    let extfvk =
+        decode_extended_full_viewing_key(enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
+    let key = UnifiedFullViewingKey::new(Some(extfvk.to_diversifiable_full_viewing_key()), None)
         .ok_or("Failed to create unified full viewing key")?;
-    let comp_note: Vec<(Note, String)> =
-        serde_wasm_bindgen::from_value(comp_notes)?;
+    let comp_note: Vec<(Note, String)> = serde_wasm_bindgen::from_value(comp_notes)?;
     let mut comp_note = comp_note
         .into_iter()
         .map(|(note, witness)| {
@@ -174,7 +176,8 @@ pub fn handle_transaction(
     }
 
     let mut buff = Vec::new();
-    tree.write(&mut buff).map_err(|_| "Cannot write tree to buffer")?;
+    tree.write(&mut buff)
+        .map_err(|_| "Cannot write tree to buffer")?;
 
     let res: JSTxSaplingData = JSTxSaplingData {
         decrypted_notes: ser_comp_note,
@@ -234,18 +237,17 @@ pub fn handle_transaction_internal(
 pub fn remove_spent_notes(
     notes_data: JsValue,
     nullifiers_data: JsValue,
-    enc_extsk: String,
+    enc_extfvk: String,
     is_testnet: bool,
 ) -> Result<JsValue, JsValue> {
-    let hex_notes: Vec<(Note, String)> =
-        serde_wasm_bindgen::from_value(notes_data)?;
-    let nullifiers: Vec<String> =
-        serde_wasm_bindgen::from_value(nullifiers_data)?;
+    let hex_notes: Vec<(Note, String)> = serde_wasm_bindgen::from_value(notes_data)?;
+    let nullifiers: Vec<String> = serde_wasm_bindgen::from_value(nullifiers_data)?;
     let mut notes: Vec<(Note, String, MerklePath<Node>)> = vec![];
     let mut unspent_notes: Vec<(Note, String)> = vec![];
 
-    let extsk = decode_extsk(&enc_extsk, is_testnet).map_err(|e| e.to_string())?;
-    let nullif_key = extsk
+    let extfvk =
+        decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
+    let nullif_key = extfvk
         .to_diversifiable_full_viewing_key()
         .to_nk(Scope::External);
 
@@ -334,7 +336,8 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
         BlockHeight::from_u32(block_height),
         network,
     )
-    .await.map_err(|e| e.to_string())?;
+    .await
+    .map_err(|e| e.to_string())?;
 
     Ok(serde_wasm_bindgen::to_value(&result)?)
 }
@@ -385,17 +388,17 @@ pub async fn create_transaction_internal(
             .add_sapling_output(None, x, amount, MemoBytes::empty())
             .map_err(|_| "Failed to add output")?,
     }
-    
+
     if change.is_positive() {
-	let change_address = decode_generic_address(network, change_address)?;
-	match change_address {
+        let change_address = decode_generic_address(network, change_address)?;
+        match change_address {
             GenericAddress::Transparent(x) => builder
-		.add_transparent_output(&x, change)
-		.map_err(|_| "Failed to add transparent change")?,
+                .add_transparent_output(&x, change)
+                .map_err(|_| "Failed to add transparent change")?,
             GenericAddress::Shield(x) => builder
-		.add_sapling_output(None, x, change, MemoBytes::empty())
-		.map_err(|_| "Failed to add shield change")?,
-	}
+                .add_sapling_output(None, x, change, MemoBytes::empty())
+                .map_err(|_| "Failed to add shield change")?,
+        }
     }
 
     let prover = PROVER.get().await;
