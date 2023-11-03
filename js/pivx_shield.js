@@ -25,7 +25,6 @@ export class PIVXShield {
   /**
    * Creates a PIVXShield object
    * @param {Object} o - options
-   * @param {String?} o.data - ShieldData string in JSON format.
    * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
    * @param {String?} o.extendedSpendingKey - Extended Spending Key.
    * @param {String?} o.extendedFullViewingKey - Full viewing key
@@ -35,7 +34,6 @@ export class PIVXShield {
    * @param {Boolean} o.loadSaplingData - if you want to load sapling parameters on creation, by deafult is set to true
    */
   static async create({
-    data,
     seed,
     extendedSpendingKey,
     extendedFullViewingKey,
@@ -44,9 +42,9 @@ export class PIVXShield {
     accountIndex = 0,
     loadSaplingData = true,
   }) {
-    if (!extendedSpendingKey && !seed && !extendedFullViewingKey && !data) {
+    if (!extendedSpendingKey && !seed && !extendedFullViewingKey) {
       throw new Error(
-        "At least one among seed, extendedSpendingKey, extendedFullViewingKey or backup data must be provided",
+        "At least one among seed, extendedSpendingKey, extendedFullViewingKey must be provided",
       );
     }
 
@@ -98,22 +96,13 @@ export class PIVXShield {
         isTestNet,
       );
     }
-    let readFromData = false;
-    if (data) {
-      const shieldData = JSON.parse(data);
-      if (pivxShield.load(shieldData)) {
-        readFromData = true;
-      }
-    }
-    if (!readFromData) {
-      const [effectiveHeight, commitmentTree] = await pivxShield.callWorker(
-        "get_closest_checkpoint",
-        blockHeight,
-        isTestNet,
-      );
-      pivxShield.lastProcessedBlock = effectiveHeight;
-      pivxShield.commitmentTree = commitmentTree;
-    }
+    const [effectiveHeight, commitmentTree] = await pivxShield.callWorker(
+      "get_closest_checkpoint",
+      blockHeight,
+      isTestNet,
+    );
+    pivxShield.lastProcessedBlock = effectiveHeight;
+    pivxShield.commitmentTree = commitmentTree;
     return pivxShield;
   }
 
@@ -209,24 +198,35 @@ export class PIVXShield {
         commitmentTree: this.commitmentTree,
         diversifierIndex: this.diversifierIndex,
         unspentNotes: this.unspentNotes,
+        isTestNet: this.isTestNet,
       }),
     );
   }
 
   /**
-   * Load shieldWorker from a shieldData
+   * Creates a PIVXShield object from a ShieldData
    * @param {ShieldData} shieldData - shield data
    */
-  load(shieldData) {
-    if (this.extfvk && this.extfvk != shieldData.extfvk) {
-      return false;
-    }
-    this.extfvk = shieldData.extfvk;
-    this.commitmentTree = shieldData.commitmentTree;
-    this.unspentNotes = shieldData.unspentNotes;
-    this.lastProcessedBlock = shieldData.lastProcessedBlock;
-    this.diversifierIndex = shieldData.diversifierIndex;
-    return true;
+  static async load(shieldData) {
+    const shieldWorker = new Worker(
+      new URL("worker_start.js", import.meta.url),
+    );
+    await new Promise((res) => {
+      shieldWorker.onmessage = (msg) => {
+        if (msg.data === "done") res();
+      };
+    });
+    const pivxShield = new PIVXShield(
+      shieldWorker,
+      null,
+      shieldData.extfvk,
+      shieldData.isTestNet,
+      shieldData.lastProcessedBlock,
+      shieldData.commitmentTree,
+    );
+    pivxShield.diversifierIndex = shieldData.diversifierIndex;
+    pivxShield.unspentNotes = shieldData.unspentNotes;
+    return pivxShield;
   }
   /**
    * Loop through the txs of a block and update useful shield data
@@ -445,6 +445,7 @@ class ShieldData {
    * @param {String} o.commitmentTree - Hex encoded commitment tree
    * @param {Uint8Array} o.diversifierIndex - Diversifier index of the last generated address
    * @param {[Note, String][]} o.unspentNotes - Array of notes, corresponding witness
+   * @param {Boolean} o.isTestNet - If this is a testnet instance or not
    */
   constructor({
     extfvk,
@@ -452,11 +453,13 @@ class ShieldData {
     commitmentTree,
     diversifierIndex,
     unspentNotes,
+    isTestNet,
   }) {
     this.extfvk = extfvk;
     this.diversifierIndex = diversifierIndex;
     this.lastProcessedBlock = lastProcessedBlock;
     this.commitmentTree = commitmentTree;
     this.unspentNotes = unspentNotes;
+    this.isTestNet = isTestNet;
   }
 }
