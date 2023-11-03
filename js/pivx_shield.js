@@ -25,7 +25,6 @@ export class PIVXShield {
   /**
    * Creates a PIVXShield object
    * @param {Object} o - options
-   * @param {String?} o.data - ShieldData string in JSON format.
    * @param {Array<Number>?} o.seed - array of 32 bytes that represents a random seed.
    * @param {String?} o.extendedSpendingKey - Extended Spending Key.
    * @param {String?} o.extendedFullViewingKey - Full viewing key
@@ -35,7 +34,6 @@ export class PIVXShield {
    * @param {Boolean} o.loadSaplingData - if you want to load sapling parameters on creation, by deafult is set to true
    */
   static async create({
-    data,
     seed,
     extendedSpendingKey,
     extendedFullViewingKey,
@@ -46,8 +44,12 @@ export class PIVXShield {
   }) {
     if (!extendedSpendingKey && !seed && !extendedFullViewingKey) {
       throw new Error(
-        "One of seed or extendedSpendingKey or extendedFullViewingKey must be provided",
+        "At least one among seed, extendedSpendingKey, extendedFullViewingKey must be provided",
       );
+    }
+
+    if (extendedSpendingKey && seed) {
+      throw new Error("Don't provide both a seed and an extendedSpendingKey");
     }
 
     const shieldWorker = new Worker(
@@ -75,7 +77,7 @@ export class PIVXShield {
         throw new Error("Cannot load sapling data");
       }
     }
-    if (!extendedSpendingKey && !extendedFullViewingKey) {
+    if (seed) {
       const serData = {
         seed: seed,
         coin_type: coinType,
@@ -94,22 +96,13 @@ export class PIVXShield {
         isTestNet,
       );
     }
-    let readFromData = false;
-    if (data) {
-      const shieldData = JSON.parse(data);
-      if (await pivxShield.load(shieldData)) {
-        readFromData = true;
-      }
-    }
-    if (!readFromData) {
-      const [effectiveHeight, commitmentTree] = await pivxShield.callWorker(
-        "get_closest_checkpoint",
-        blockHeight,
-        isTestNet,
-      );
-      pivxShield.lastProcessedBlock = effectiveHeight;
-      pivxShield.commitmentTree = commitmentTree;
-    }
+    const [effectiveHeight, commitmentTree] = await pivxShield.callWorker(
+      "get_closest_checkpoint",
+      blockHeight,
+      isTestNet,
+    );
+    pivxShield.lastProcessedBlock = effectiveHeight;
+    pivxShield.commitmentTree = commitmentTree;
     return pivxShield;
   }
 
@@ -197,42 +190,44 @@ export class PIVXShield {
   }
 
   //Save your shield data
-  async save() {
-    const { address, _ } = await this.callWorker(
-      "generate_default_payment_address",
-      this.extfvk,
-      this.isTestNet,
-    );
-
+  save() {
     return JSON.stringify(
       new ShieldData({
-        defaultAddress: address,
+        extfvk: this.extfvk,
         lastProcessedBlock: this.lastProcessedBlock,
         commitmentTree: this.commitmentTree,
         diversifierIndex: this.diversifierIndex,
         unspentNotes: this.unspentNotes,
+        isTestNet: this.isTestNet,
       }),
     );
   }
 
   /**
-   * Load shieldWorker from a shieldData
-   * @param {ShieldData} shieldData - shield data
+   * Creates a PIVXShield object from shieldData
+   * @param {String} data - output of save() function
    */
-  async load(shieldData) {
-    const { address, _ } = await this.callWorker(
-      "generate_default_payment_address",
-      this.extfvk,
-      this.isTestNet,
+  static async load(data) {
+    const shieldData = JSON.parse(data);
+    const shieldWorker = new Worker(
+      new URL("worker_start.js", import.meta.url),
     );
-    if (address != shieldData.defaultAddress) {
-      return false;
-    }
-    this.commitmentTree = shieldData.commitmentTree;
-    this.unspentNotes = shieldData.unspentNotes;
-    this.lastProcessedBlock = shieldData.lastProcessedBlock;
-    this.diversifierIndex = shieldData.diversifierIndex;
-    return true;
+    await new Promise((res) => {
+      shieldWorker.onmessage = (msg) => {
+        if (msg.data === "done") res();
+      };
+    });
+    const pivxShield = new PIVXShield(
+      shieldWorker,
+      null,
+      shieldData.extfvk,
+      shieldData.isTestNet,
+      shieldData.lastProcessedBlock,
+      shieldData.commitmentTree,
+    );
+    pivxShield.diversifierIndex = shieldData.diversifierIndex;
+    pivxShield.unspentNotes = shieldData.unspentNotes;
+    return pivxShield;
   }
   /**
    * Loop through the txs of a block and update useful shield data
@@ -447,23 +442,26 @@ class ShieldData {
   /**
    * Add a transparent UTXO, along with its private key
    * @param {Object} o - Options
-   * @param {String} o.defaultAddress - Default shield address used for double check that data matches the seed
+   * @param {String} o.extfvk - Extended full viewing key
    * @param {Number} o.lastProcessedBlock - Last processed block in blockchain
    * @param {String} o.commitmentTree - Hex encoded commitment tree
    * @param {Uint8Array} o.diversifierIndex - Diversifier index of the last generated address
    * @param {[Note, String][]} o.unspentNotes - Array of notes, corresponding witness
+   * @param {Boolean} o.isTestNet - If this is a testnet instance or not
    */
   constructor({
-    defaultAddress,
+    extfvk,
     lastProcessedBlock,
     commitmentTree,
     diversifierIndex,
     unspentNotes,
+    isTestNet,
   }) {
-    this.defaultAddress = defaultAddress;
+    this.extfvk = extfvk;
     this.diversifierIndex = diversifierIndex;
     this.lastProcessedBlock = lastProcessedBlock;
     this.commitmentTree = commitmentTree;
     this.unspentNotes = unspentNotes;
+    this.isTestNet = isTestNet;
   }
 }
