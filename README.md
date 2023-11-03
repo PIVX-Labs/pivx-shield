@@ -80,7 +80,7 @@ const shield = await Shield.create({...});
 // For example, with a standard PIVX node, `sendrawtransaction` can be used
 // For more info,
 // https://github.com/PIVX-Project/PIVX/wiki/Raw-Transactions#user-content-createrawtransaction_txidtxidvoutn_addressamount
-const { hex }  = await shield.createTransaction({
+const { hex, txid }  = await shield.createTransaction({
 	// Transparent addresses are supported as well
 	address: "ptestsapling1s23gkjxqnedkptdvp8qn3m57z0meq2530qxwe8w7x9sdz05xg5yu8wh7534memvjwqntw8mzr3w",
 	// 50 tPIV
@@ -88,9 +88,8 @@ const { hex }  = await shield.createTransaction({
 	useShieldInputs: true,
 });
 
-// Let's assume your send transaction method returns the txid if successful or null if not
-const txid = your_send_transaction_method(hex);
-if (txid) {
+const success = your_send_transaction_method(hex);
+if (success) {
 	shield.finalizeTransaction(txid);
 } else {
 	shield.discardTransaction(txid);

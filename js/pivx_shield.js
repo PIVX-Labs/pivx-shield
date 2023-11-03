@@ -311,8 +311,8 @@ export class PIVXShield {
 
   /**
    * Creates a transaction, sending `amount` satoshis to the address
-   * @param {{address: String, amount: Number, blockHeight: Number, useShieldInputs: bool, utxos: UTXO[]?, transparentChangeAddress: String?}} target
-   * @returns {{hex: String, spentUTXOs: UTXO[]}}
+   * @param {{address: string, amount: number, blockHeight: number, useShieldInputs: boolean, utxos: UTXO[]?, transparentChangeAddress: string?}} target
+   * @returns {{hex: string, spentUTXOs: UTXO[], txid: string}}
    */
   async createTransaction({
     address,
@@ -356,6 +356,7 @@ export class PIVXShield {
             const [txid, vout] = u.split(",");
             return new UTXO({ txid, vout: Number.parseInt(vout) });
           }),
+      txid,
     };
   }
   async getTxStatus() {
