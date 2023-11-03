@@ -204,10 +204,11 @@ export class PIVXShield {
   }
 
   /**
-   * Creates a PIVXShield object from a ShieldData
-   * @param {ShieldData} shieldData - shield data
+   * Creates a PIVXShield object from shieldData
+   * @param {String} data - output of save() function
    */
-  static async load(shieldData) {
+  static async load(data) {
+    const shieldData = JSON.parse(data);
     const shieldWorker = new Worker(
       new URL("worker_start.js", import.meta.url),
     );
