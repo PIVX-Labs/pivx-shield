@@ -483,7 +483,7 @@ export class Note {
 export class UTXO {
   /**
    * Add a transparent UTXO, along with its private key
-   * @param {Object} o - Options
+   * @param {object} o - Options
    * @param {string} o.txid - Transaction ID of the UTXO
    * @param {number} o.vout - output index of the UTXO
    * @param {number?} o.amount - Value in satoshi of the UTXO
