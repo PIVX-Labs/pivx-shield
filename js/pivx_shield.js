@@ -226,11 +226,6 @@ export class PIVXShield {
         diversifierIndex: this.diversifierIndex,
         unspentNotes: this.unspentNotes,
         isTestnet: this.isTestnet,
-        defaultAddress: address,
-        lastProcessedBlock: this.#lastProcessedBlock,
-        commitmentTree: this.#commitmentTree,
-        diversifierIndex: this.#diversifierIndex,
-        unspentNotes: this.#unspentNotes,
       }),
     );
   }
