@@ -59,7 +59,6 @@ export class PIVXShield {
    * @type {Map<string, string[]>} A map txid->nullifiers, storing pending transaction.
    * @private
    */
-
   #pendingSpentNotes = new Map();
 
   /**
