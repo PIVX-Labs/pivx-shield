@@ -19,10 +19,10 @@ tokio = { version = "1.26.0", default-features = false, features = ["sync", "mac
 rayon = "1.7.0"
 lazy_static = "1.4.0"
 async_once = "0.2.6"
-sha256 = "1.1.2"
+sha256 = { version = "1.1.2", default-features = false }
 getrandom = { version = "0.2", features = ["js"] }
 reqwest = { version = "0.11.14", features = ["blocking"] }
-wasm-bindgen = "0.2.74"
+wasm-bindgen = "=0.2.84" # Wasm-bindgen makes stdweb fail to compile. See https://github.com/koute/stdweb/issues/427
 wasm-bindgen-futures = "0.4.34"
 pivx_client_backend = { git = "https://github.com/Duddino/librustpivx" }
 pivx_primitives = { git = "https://github.com/Duddino/librustpivx", default-features = false, features = ["transparent-inputs"] }
