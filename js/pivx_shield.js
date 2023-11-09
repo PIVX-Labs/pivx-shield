@@ -84,7 +84,10 @@ export class PIVXShield {
     };
   }
 
-  async #callWorker(name, ...args) {
+  /**
+   * @private
+   */
+  async callWorker(name, ...args) {
     const uuid = genuuid();
     return await new Promise((res, rej) => {
       this.#promises.set(uuid, { res, rej });
@@ -152,14 +155,14 @@ export class PIVXShield {
         coin_type: coinType,
         account_index: accountIndex,
       };
-      extendedSpendingKey = await pivxShield.#callWorker(
+      extendedSpendingKey = await pivxShield.callWorker(
         "generate_extended_spending_key_from_seed",
         serData,
       );
       pivxShield.#extsk = extendedSpendingKey;
     }
     if (extendedSpendingKey) {
-      pivxShield.#extfvk = await pivxShield.#callWorker(
+      pivxShield.#extfvk = await pivxShield.callWorker(
         "generate_extended_full_viewing_key",
         pivxShield.#extsk,
         isTestnet,
@@ -171,8 +174,8 @@ export class PIVXShield {
       blockHeight,
       isTestnet,
     );
-    pivxShield.lastProcessedBlock = effectiveHeight;
-    pivxShield.commitmentTree = commitmentTree;
+    pivxShield.#lastProcessedBlock = effectiveHeight;
+    pivxShield.#commitmentTree = commitmentTree;
 
     return pivxShield;
   }
@@ -200,7 +203,7 @@ export class PIVXShield {
     if (this.#extsk) {
       throw new Error("A spending key is aready loaded");
     }
-    const enc_extfvk = await this.#callWorker(
+    const enc_extfvk = await this.callWorker(
       "generate_extended_full_viewing_key",
       enc_extsk,
       this.#isTestnet,
@@ -219,12 +222,12 @@ export class PIVXShield {
   save() {
     return JSON.stringify(
       new ShieldData({
-        extfvk: this.extfvk,
-        lastProcessedBlock: this.lastProcessedBlock,
-        commitmentTree: this.commitmentTree,
-        diversifierIndex: this.diversifierIndex,
-        unspentNotes: this.unspentNotes,
-        isTestnet: this.isTestnet,
+        extfvk: this.#extfvk,
+        lastProcessedBlock: this.#lastProcessedBlock,
+        commitmentTree: this.#commitmentTree,
+        diversifierIndex: this.#diversifierIndex,
+        unspentNotes: this.#unspentNotes,
+        isTestnet: this.#isTestnet,
       }),
     );
   }
@@ -252,8 +255,8 @@ export class PIVXShield {
       shieldData.lastProcessedBlock,
       shieldData.commitmentTree,
     );
-    pivxShield.diversifierIndex = shieldData.diversifierIndex;
-    pivxShield.unspentNotes = shieldData.unspentNotes;
+    pivxShield.#diversifierIndex = shieldData.diversifierIndex;
+    pivxShield.#unspentNotes = shieldData.unspentNotes;
     return pivxShield;
   }
 
@@ -278,7 +281,7 @@ export class PIVXShield {
    * @param {string} hex - transaction hex
    */
   async #addTransaction(hex, decryptOnly = false) {
-    const res = await this.#callWorker(
+    const res = await this.callWorker(
       "handle_transaction",
       this.#commitmentTree,
       hex,
@@ -308,7 +311,7 @@ export class PIVXShield {
    * @param {string[]} blockJson - Array of nullifiers
    */
   async #removeSpentNotes(nullifiers) {
-    this.#unspentNotes = await this.#callWorker(
+    this.#unspentNotes = await this.callWorker(
       "remove_spent_notes",
       this.#unspentNotes,
       nullifiers,
@@ -351,7 +354,7 @@ export class PIVXShield {
     if (!useShieldInputs && !transparentChangeAddress) {
       throw new Error("Change must have the same type of input used!");
     }
-    const { txid, txhex, nullifiers } = await this.#callWorker(
+    const { txid, txhex, nullifiers } = await this.callWorker(
       "create_transaction",
       {
         notes: useShieldInputs ? this.#unspentNotes : null,
@@ -392,7 +395,7 @@ export class PIVXShield {
    * it always returns 0.0
    */
   async getTxStatus() {
-    return await this.#callWorker("read_tx_progress");
+    return await this.callWorker("read_tx_progress");
   }
   /**
    * Signals the class that a transaction was sent successfully
@@ -420,7 +423,7 @@ export class PIVXShield {
    * @returns {Promise<string>} new shield address
    */
   async getNewAddress() {
-    const { address, diversifier_index } = await this.#callWorker(
+    const { address, diversifier_index } = await this.callWorker(
       "generate_next_shielding_payment_address",
       this.#extfvk,
       this.#diversifierIndex,
@@ -436,7 +439,7 @@ export class PIVXShield {
    * @returns {Promise<void>} resolves when the sapling prover is loaded
    */
   async loadSaplingProver() {
-    return await this.#callWorker("load_prover");
+    return await this.callWorker("load_prover");
   }
 
   /**
