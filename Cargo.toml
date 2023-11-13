@@ -1,6 +1,6 @@
 [package]
 name = "pivx-shield-rust"
-version = "1.0.3"
+version = "1.0.4"
 authors = ["Duddino <duddino@duddino.com>", "Alessandro Rezzi <alessandrorezzi2000@gmail.com>"]
 edition = "2021"
 description = "WASM library for interoperation with the PIVX Shield sapling protocol."
