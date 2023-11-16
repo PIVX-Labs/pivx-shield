@@ -26,7 +26,7 @@ export class PIVXShield {
    * Diversifier index of the last generated address.
    * @private
    */
-  #diversifierIndex = new Uint8Array(11);
+  #diversifierIndex = new Array(11).fill(0);
 
   /**
    * @type {boolean}
