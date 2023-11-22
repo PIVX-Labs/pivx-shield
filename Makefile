@@ -1,5 +1,5 @@
 .PHONY: all
-all: pkg pkg_multicore js/pivx_shield.d.ts js/README.md
+all: pkg pkg_multicore js/pivx_shield.js js/README.md
 
 pkg: src/ Cargo.toml
 	wasm-pack build --target web
@@ -17,7 +17,7 @@ pkg_multicore: src/ Cargo.toml
 js/README.md: README.md
 	cp README.md js/
 
-js/pivx_shield.d.ts: js/pivx_shield.js js/node_modules
+js/pivx_shield.js: js/pivx_shield.ts js/node_modules
 	cd js/; \
 	npm run build
 
