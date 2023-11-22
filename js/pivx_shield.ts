@@ -58,7 +58,7 @@ export class PIVXShield {
   /**
    * Diversifier index of the last generated address.
    */
-  private diversifierIndex = new Uint8Array(11);
+  private diversifierIndex = new Array<number>(11).fill(0);
 
   isTestnet: boolean;
 
@@ -236,7 +236,7 @@ export class PIVXShield {
   }
 
   /**
-   * @returns {string} a string that saves the public shield data.
+   * @returns a string that saves the public shield data.
    * The seed or extended spending key still needs to be provided
    * if spending authority is needed
    */
@@ -322,7 +322,7 @@ export class PIVXShield {
 
   /**
    * Remove the Shield Notes that match the nullifiers given in input
-   * @param {string[]} nullifiers - Array of nullifiers
+   * @param nullifiers - Array of nullifiers
    */
   private async removeSpentNotes(nullifiers: string[]) {
     this.unspentNotes = await this.callWorker(
@@ -351,8 +351,6 @@ export class PIVXShield {
 
   /**
    * Creates a transaction, sending `amount` satoshis to the address
-   * @param {{address: string, amount: number, blockHeight: number, useShieldInputs: boolean, utxos: UTXO[]?, transparentChangeAddress: string?}} target
-   * @returns {{hex: string, spentUTXOs: UTXO[], txid: string}}
    */
   async createTransaction({
     address,
@@ -438,7 +436,7 @@ export class PIVXShield {
   async getNewAddress() {
     const { address, diversifier_index } = await this.callWorker<{
       address: string;
-      diversifier_index: Uint8Array;
+      diversifier_index: number[];
     }>(
       "generate_next_shielding_payment_address",
       this.extfvk,
@@ -470,7 +468,7 @@ export interface UTXO {
   txid: string;
   vout: number;
   amount?: number;
-  privateKey?: Uint8Array;
+  private_key?: Uint8Array;
   script?: Uint8Array;
 }
 
