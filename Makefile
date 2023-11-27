@@ -30,6 +30,12 @@ publish: all
 	cd pkg_multicore; npm publish
 	cd js; npm publish
 
+.PHONE: pack
+pack: all
+	cd pkg; npm pack
+	cd pkg_multicore; npm pack
+	cd js; npm pack
+
 .PHONY: clean
 clean:
 	cargo clean
