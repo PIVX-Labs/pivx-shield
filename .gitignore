@@ -5,5 +5,5 @@ pkg/
 pkg_multicore/
 wasm-pack.log
 js/node_modules
-js/pivx_shield.d.ts
+js/pivx_shield.js
 js/README.md

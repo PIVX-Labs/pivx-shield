@@ -2,14 +2,14 @@
   "name": "pivx-shield",
   "version": "1.0.8",
   "description": "WASM library for interoperation with the PIVX Shield sapling protocol.",
-    "files": [
-	"*"
+  "files": [
+    "*"
   ],
   "module": "pivx_shield.js",
   "typings": "pivx_shield.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "tsc --allowJs -d --emitDeclarationOnly pivx_shield.js"
+    "build": "tsc"
   },
   "dependencies": {
     "bs58": "^5.0.0",
@@ -29,6 +29,7 @@
     "url": "https://github.com/PIVX-Labs/pivx-shield"
   },
   "devDependencies": {
+    "@types/uuid": "^9.0.7",
     "typescript": "^5.0.3"
   }
 }
