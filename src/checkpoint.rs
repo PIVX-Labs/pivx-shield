@@ -97,7 +97,7 @@ mod test {
     #[test]
     fn check_testnet_checkpoints() -> Result<(), Box<dyn Error>> {
         // Blocks above last checkpoint should yield last checkpoint
-        assert_eq!(get_checkpoint(1123200 * 5, true).0, 1123200);
+        assert_eq!(get_checkpoint(1123200 + 30000, true).0, 1123200);
         // Blocks equal to last checkpoint should yield last checkpoint
         assert_eq!(get_checkpoint(1123200, true).0, 1123200);
         // Blocks in between two adjacent checkpoints should yield the smaller of the two
