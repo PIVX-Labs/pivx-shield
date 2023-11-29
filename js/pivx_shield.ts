@@ -88,6 +88,11 @@ export class PIVXShield {
    */
   private pendingUnspentNotes: Map<string, Note[]> = new Map();
 
+  /**
+   * Array in which own addresses are stored
+   */
+  private ownAddresses: string[] = [];
+
   private promises: Map<
     string,
     { res: (...args: any) => void; rej: (...args: any) => void }
@@ -275,6 +280,7 @@ export class PIVXShield {
     );
     pivxShield.diversifierIndex = shieldData.diversifierIndex;
     pivxShield.unspentNotes = shieldData.unspentNotes;
+    await pivxShield.loadAddresses();
     return pivxShield;
   }
 
@@ -444,7 +450,43 @@ export class PIVXShield {
       this.isTestnet,
     );
     this.diversifierIndex = diversifier_index;
+    this.ownAddresses.push(address);
     return address;
+  }
+
+  /**
+   * @param address_to_check - shield address
+   * @returns true iff the shield address belongs to the wallet
+   */
+  isMyAddress(address_to_check: string) {
+    return this.ownAddresses.includes(address_to_check);
+  }
+
+  /**
+   * loads used addresses
+   */
+  async loadAddresses() {
+    let currentDiversifierIndex = new Array<number>(11).fill(0);
+    const totIterations = this.diversifierIndex.reduce(
+      (s, n, i) => s + n * 256 ** i,
+      0,
+    );
+    let j = 0;
+    while (j <= totIterations) {
+      const { address, diversifier_index } = await this.callWorker<{
+        address: string;
+        diversifier_index: number[];
+      }>(
+        "generate_next_shielding_payment_address",
+        this.extfvk,
+        currentDiversifierIndex,
+        this.isTestnet,
+      );
+      currentDiversifierIndex = diversifier_index;
+      j = currentDiversifierIndex.reduce((s, n, i) => s + n * 256 ** i, 0);
+      this.ownAddresses.push(address);
+    }
+    return false;
   }
 
   /**
