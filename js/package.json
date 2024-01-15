@@ -6,6 +6,7 @@
     "*"
   ],
   "module": "pivx_shield.js",
+  "main": "pivx_shield.js",
   "typings": "pivx_shield.d.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
