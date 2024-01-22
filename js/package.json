@@ -1,6 +1,6 @@
 {
   "name": "pivx-shield",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "WASM library for interoperation with the PIVX Shield sapling protocol.",
   "files": [
     "*"
