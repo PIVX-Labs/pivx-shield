@@ -48,9 +48,8 @@ tokio = { version = "1.26.0", features = ["full"] }
 wasm-bindgen-test = "0.3.13"
 
 [profile.release]
-opt-level = 2
+opt-level = 3
 lto = true
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = true
-
+wasm-opt = ["-O4", "--enable-mutable-globals"]
