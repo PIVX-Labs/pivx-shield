@@ -1,6 +1,6 @@
 [package]
 name = "pivx-shield-rust"
-version = "1.1.0"
+version = "1.1.2"
 authors = ["Duddino <duddino@duddino.com>", "Alessandro Rezzi <alessandrorezzi2000@gmail.com>"]
 edition = "2021"
 description = "WASM library for interoperation with the PIVX Shield sapling protocol."
@@ -48,9 +48,8 @@ tokio = { version = "1.26.0", features = ["full"] }
 wasm-bindgen-test = "0.3.13"
 
 [profile.release]
-opt-level = 2
+opt-level = 3
 lto = true
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = true
-
+wasm-opt = ["-O4", "--enable-mutable-globals"]
