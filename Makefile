@@ -7,11 +7,11 @@ pkg: src/ Cargo.toml
 	cp wrong-package.md pkg/README.md
 
 pkg_multicore: src/ Cargo.toml
-	rustup override set nightly-2023-03-28;
-	wasm-pack build --target web --out-dir pkg_multicore -- --config "build-std = [\"panic_abort\", \"std\"]" --features="multicore";
+	RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' \
+	  rustup run nightly-2023-03-28 \
+	  wasm-pack build --weak-refs --out-dir "pkg_multicore" --target web -- --features="multicore" -Z build-std=panic_abort,std
 	sed -i 's/pivx-shield-rust/pivx-shield-rust-multicore/' pkg_multicore/package.json
 	sed -i 's/pivx_shield_rust_bg.wasm/*/' pkg_multicore/package.json
-	rustup override set stable;
 	cp wrong-package.md pkg_multicore/README.md
 
 js/README.md: README.md
@@ -43,3 +43,4 @@ clean:
 	-rm -rf pkg_multicore/
 	-rm -rf js/node_modules
 	-rm js/pivx_shield.d.ts
+
