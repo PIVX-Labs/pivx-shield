@@ -6,7 +6,9 @@ use pivx_primitives::consensus::Network;
 pub use pivx_primitives::consensus::Parameters;
 pub use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
 use pivx_primitives::legacy::Script;
+use pivx_primitives::memo::Memo;
 pub use pivx_primitives::memo::MemoBytes;
+use pivx_primitives::memo::TextMemo;
 pub use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
 pub use pivx_primitives::sapling::PaymentAddress;
 pub use pivx_primitives::transaction::builder::Progress;
@@ -32,6 +34,7 @@ use secp256k1::SecretKey;
 pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 pub use std::path::Path;
+use std::str::FromStr;
 #[cfg(feature = "multicore")]
 use std::sync::Mutex;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
@@ -289,6 +292,7 @@ pub struct JSTxOptions {
     notes: Option<Vec<(Note, String)>>,
     utxos: Option<Vec<Utxo>>,
     extsk: String,
+    memo: String,
     to_address: String,
     change_address: String,
     amount: u64,
@@ -307,6 +311,7 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
         block_height,
         is_testnet,
         utxos,
+        memo,
     } = serde_wasm_bindgen::from_value::<JSTxOptions>(options)?;
     assert!(
         !(notes.is_some() && utxos.is_some()),
@@ -318,6 +323,7 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
     } else {
         Network::MainNetwork
     };
+    let memo = Memo::from_str(&memo).map_err(|_| "Can't convert string to memo")?;
     let input = if let Some(mut notes) = notes {
         notes.sort_by_key(|(note, _)| note.value().inner());
         Either::Left(notes)
@@ -333,6 +339,7 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
         &to_address,
         &change_address,
         amount,
+        &memo,
         BlockHeight::from_u32(block_height),
         network,
     )
@@ -351,6 +358,7 @@ pub async fn create_transaction_internal(
     to_address: &str,
     change_address: &str,
     mut amount: u64,
+    memo: &Memo,
     block_height: BlockHeight,
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
@@ -385,7 +393,7 @@ pub async fn create_transaction_internal(
             .add_transparent_output(&x, amount)
             .map_err(|_| "Failed to add output")?,
         GenericAddress::Shield(x) => builder
-            .add_sapling_output(None, x, amount, MemoBytes::empty())
+            .add_sapling_output(None, x, amount, memo.encode())
             .map_err(|_| "Failed to add output")?,
     }
 

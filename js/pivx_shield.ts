@@ -31,6 +31,7 @@ interface Transaction {
   useShieldInputs: boolean;
   utxos: UTXO[];
   transparentChangeAddress: string;
+  memo: string;
 }
 
 interface CreateTransactionReturnValue {
@@ -359,6 +360,7 @@ export class PIVXShield {
     useShieldInputs = true,
     utxos,
     transparentChangeAddress,
+    memo = "",
   }: Transaction) {
     if (!this.extsk) {
       throw new Error("You cannot create a transaction in view only mode!");
@@ -380,6 +382,7 @@ export class PIVXShield {
           amount,
           block_height: blockHeight,
           is_testnet: this.isTestnet,
+          memo,
         },
       );
 
