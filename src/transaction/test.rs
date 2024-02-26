@@ -10,6 +10,7 @@ use pivx_client_backend::encoding;
 use pivx_client_backend::encoding::decode_extended_spending_key;
 use pivx_client_backend::keys::UnifiedFullViewingKey;
 use pivx_primitives::consensus::{BlockHeight, Network, Parameters, TEST_NETWORK};
+use pivx_primitives::memo::Memo;
 use pivx_primitives::merkle_tree::CommitmentTree;
 use pivx_primitives::sapling::value::NoteValue;
 use pivx_primitives::sapling::Node;
@@ -17,6 +18,7 @@ use pivx_primitives::sapling::Note;
 use pivx_primitives::sapling::Rseed::BeforeZip212;
 use std::error::Error;
 use std::io::Cursor;
+use std::str::FromStr;
 
 #[test]
 fn check_tx_decryption() {
@@ -91,12 +93,14 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
     let mut path_vec = vec![];
     path.write(&mut path_vec)?;
     let path = hex::encode(path_vec);
+    let memo = Memo::from_str("Hello").map_err(|_| "Failed to encode memo")?;
     let tx = create_transaction_internal(
         Either::Left(vec![(note.clone(), path)]),
         &extended_spending_key,
         output,
         address,
         5 * 10e6 as u64,
+        &memo,
         BlockHeight::from_u32(317),
         Network::TestNetwork,
     )
