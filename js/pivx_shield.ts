@@ -22,6 +22,7 @@ interface TransactionResult {
   decrypted_notes: [Note, string][];
   commitment_tree: string;
   nullifiers: string[];
+  memos: string[];
 }
 
 interface Transaction {
@@ -313,12 +314,15 @@ export class PIVXShield {
         await this.removeSpentNotes(res.nullifiers);
       }
     }
-    return res.decrypted_notes.filter(
-      (note) =>
-        !this.unspentNotes.some(
-          (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0]),
-        ),
-    );
+    return {
+      notes: res.decrypted_notes.filter(
+        (note) =>
+          !this.unspentNotes.some(
+            (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0]),
+          ),
+      ),
+      memos: res.memos,
+    };
   }
 
   /**
@@ -391,7 +395,7 @@ export class PIVXShield {
     }
     this.pendingUnspentNotes.set(
       txid,
-      (await this.addTransaction(txhex, true)).map((n) => n[0]),
+      (await this.addTransaction(txhex, true)).notes.map((n) => n[0]),
     );
     return {
       hex: txhex,
