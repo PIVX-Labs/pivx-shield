@@ -30,8 +30,10 @@ fn check_tx_decryption() {
     let key = UnifiedFullViewingKey::new(Some(skey.to_diversifiable_full_viewing_key()), None)
         .expect("Failed to create key");
     let mut comp_note = vec![];
-    let nullifiers =
+    let (nullifiers, memos) =
         handle_transaction_internal(&mut tree, tx, &key, true, &mut comp_note).unwrap();
+    assert_eq!(memos.len(), 1);
+    assert_eq!(memos[0], "");
     //This was a t-s tx
     assert_eq!(nullifiers.len(), 0);
     //Successfully decrypt exactly 1 note
