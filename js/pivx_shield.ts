@@ -520,11 +520,11 @@ export class PIVXShield {
   }
 
   /**
-   * @param nullifier - A shield spent nullifier
-   * @returns true if the provided nullifier belongs to the wallet
+   * @param nullifier - A sapling nullifier
+   * @returns the Note corresponding to a given nullifier
    */
-  isMyNullifier(nullifier: string) {
-    return this.mapNullifierNote.has(nullifier);
+  getNoteFromNullifier(nullifier: string) {
+    return this.mapNullifierNote.get(nullifier);
   }
 }
 
