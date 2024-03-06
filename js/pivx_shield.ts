@@ -520,6 +520,13 @@ export class PIVXShield {
   }
 
   /**
+   * @param nullifier - A sapling nullifier
+   * @returns the Note corresponding to a given nullifier
+   */
+  getNoteFromNullifier(nullifier: string) {
+    return this.mapNullifierNote.get(nullifier);
+  }
+  /**
    * @returns sapling root
    */
   async getSaplingRoot(): Promise<string> {
@@ -542,13 +549,6 @@ export class PIVXShield {
     this.pendingSpentNotes = new Map();
     this.pendingUnspentNotes = new Map();
     this.mapNullifierNote = new Map();
-  }
-  /*
-   * @param nullifier - A shield spent nullifier
-   * @returns true if the provided nullifier belongs to the wallet
-   */
-  isMyNullifier(nullifier: string) {
-    return this.mapNullifierNote.has(nullifier);
   }
 }
 
