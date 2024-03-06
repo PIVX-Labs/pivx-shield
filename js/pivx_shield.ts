@@ -256,6 +256,7 @@ export class PIVXShield {
       diversifierIndex: this.diversifierIndex,
       unspentNotes: this.unspentNotes,
       isTestnet: this.isTestnet,
+      mapNullifierNote: Object.fromEntries(this.mapNullifierNote),
     });
   }
   /**
@@ -280,6 +281,9 @@ export class PIVXShield {
       shieldData.isTestnet,
       shieldData.lastProcessedBlock,
       shieldData.commitmentTree,
+    );
+    pivxShield.mapNullifierNote = new Map(
+      Object.entries(shieldData.mapNullifierNote),
     );
     pivxShield.diversifierIndex = shieldData.diversifierIndex;
     pivxShield.unspentNotes = shieldData.unspentNotes;
