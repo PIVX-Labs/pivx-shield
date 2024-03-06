@@ -312,12 +312,7 @@ export class PIVXShield {
         await this.removeSpentNotes(res.nullifiers);
       }
     }
-    return res.decrypted_notes.filter(
-      (note) =>
-        !this.unspentNotes.some(
-          (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0]),
-        ),
-    );
+    return res.decrypted_notes;
   }
 
   /**
@@ -386,9 +381,16 @@ export class PIVXShield {
     if (useShieldInputs) {
       this.pendingSpentNotes.set(txid, nullifiers);
     }
+    const decryptedNewNotes = (await this.addTransaction(txhex, true)).filter(
+      (note) =>
+        !this.unspentNotes.some(
+          (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0]),
+        ),
+    );
+
     this.pendingUnspentNotes.set(
       txid,
-      (await this.addTransaction(txhex, true)).map((n) => n[0]),
+      decryptedNewNotes.map((n) => n[0]),
     );
     return {
       hex: txhex,
