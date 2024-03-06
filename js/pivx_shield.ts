@@ -88,6 +88,14 @@ export class PIVXShield {
    */
   private pendingUnspentNotes: Map<string, Note[]> = new Map();
 
+  /**
+   *
+   * @private
+   * Map nullifier -> Note
+   * It contains all notes in the history of the wallet, both spent and unspent
+   */
+  private mapNullifierNote: Map<string, SimplifiedNote> = new Map();
+
   private promises: Map<
     string,
     { res: (...args: any) => void; rej: (...args: any) => void }
@@ -289,19 +297,28 @@ export class PIVXShield {
       );
     }
     for (const tx of block.txs) {
-      await this.addTransaction(tx.hex);
+      const decryptedNotes = await this.addTransaction(tx.hex);
+      // Add all the decryptedNotes to the Nullifier->Note map
+      for (const note of decryptedNotes) {
+        const nullifier = await this.generateNullifierFromNote(note);
+        const simplifiedNote = {
+          value: note[0].value,
+          recipient: await this.getShieldAddressFromNote(note[0]),
+        };
+        this.mapNullifierNote.set(nullifier, simplifiedNote);
+      }
+      // Delete the corresponding pending transaction
       this.pendingUnspentNotes.delete(tx.txid);
     }
     this.lastProcessedBlock = block.height;
   }
-
 
   /**
    *
    * @param note - Note and its corresponding witness
    * Generate the nullifier for a given pair note, witness
    */
-  async generateNullifierFromNote(note: [Note, String]) {
+  private async generateNullifierFromNote(note: [Note, String]) {
     return await this.callWorker<string>(
       "get_nullifier_from_note",
       note,
@@ -520,6 +537,14 @@ export class PIVXShield {
     this.unspentNotes = [];
     this.pendingSpentNotes = new Map();
     this.pendingUnspentNotes = new Map();
+    this.mapNullifierNote = new Map();
+  }
+  /*
+   * @param nullifier - A shield spent nullifier
+   * @returns true if the provided nullifier belongs to the wallet
+   */
+  isMyNullifier(nullifier: string) {
+    return this.mapNullifierNote.has(nullifier);
   }
 }
 
