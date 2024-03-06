@@ -268,6 +268,27 @@ pub fn remove_spent_notes(
     Ok(serde_wasm_bindgen::to_value(&unspent_notes)?)
 }
 
+#[wasm_bindgen]
+pub fn get_nullifier_from_note(
+    note_data: JsValue,
+    enc_extfvk: String,
+    is_testnet: bool,
+) -> Result<JsValue, JsValue> {
+    let extfvk =
+        decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
+    let nullif_key = extfvk
+        .to_diversifiable_full_viewing_key()
+        .to_nk(Scope::External);
+    let (note, hex_witness): (Note, String) = serde_wasm_bindgen::from_value(note_data)?;
+    let witness = Cursor::new(hex::decode(hex_witness).map_err(|e| e.to_string())?);
+    let path = IncrementalWitness::<Node>::read(witness)
+        .map_err(|_| "Cannot read witness from buffer")?
+        .path()
+        .ok_or("Cannot find witness path")?;
+    let ser_nullifiers = hex::encode(note.nf(&nullif_key, path.position).0);
+    Ok(serde_wasm_bindgen::to_value(&ser_nullifiers)?)
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct JSTransaction {
     pub txid: String,
