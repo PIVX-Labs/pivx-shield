@@ -6,7 +6,9 @@ use pivx_primitives::consensus::Network;
 pub use pivx_primitives::consensus::Parameters;
 pub use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
 use pivx_primitives::legacy::Script;
+use pivx_primitives::memo::Memo;
 pub use pivx_primitives::memo::MemoBytes;
+use pivx_primitives::memo::TextMemo;
 pub use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
 pub use pivx_primitives::sapling::PaymentAddress;
 pub use pivx_primitives::transaction::builder::Progress;
@@ -32,6 +34,7 @@ use secp256k1::SecretKey;
 pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 pub use std::path::Path;
+use std::str::FromStr;
 #[cfg(feature = "multicore")]
 use std::sync::Mutex;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
@@ -131,6 +134,7 @@ pub struct JSTxSaplingData {
     pub decrypted_notes: Vec<(Note, String)>,
     pub nullifiers: Vec<String>,
     pub commitment_tree: String,
+    pub memos: Vec<String>,
 }
 
 //Input a tx and return: the updated commitment merkletree, all the nullifier found in the tx and all the node decoded with the corresponding witness
@@ -159,8 +163,9 @@ pub fn handle_transaction(
             (note, IncrementalWitness::read(wit).unwrap())
         })
         .collect::<Vec<_>>();
-    let nullifiers = handle_transaction_internal(&mut tree, tx, &key, true, &mut comp_note)
-        .map_err(|_| "Cannot decode tx")?;
+    let (nullifiers, memos) =
+        handle_transaction_internal(&mut tree, tx, &key, true, &mut comp_note)
+            .map_err(|_| "Cannot decode tx")?;
     let mut ser_comp_note: Vec<(Note, String)> = vec![];
     let mut ser_nullifiers: Vec<String> = vec![];
     for (note, witness) in comp_note.iter() {
@@ -183,6 +188,7 @@ pub fn handle_transaction(
         decrypted_notes: ser_comp_note,
         nullifiers: ser_nullifiers,
         commitment_tree: hex::encode(buff),
+        memos,
     };
     Ok(serde_wasm_bindgen::to_value(&res).map_err(|_| "Cannot serialize tx output")?)
 }
@@ -194,7 +200,7 @@ pub fn handle_transaction_internal(
     key: &UnifiedFullViewingKey,
     is_testnet: bool,
     witnesses: &mut Vec<(Note, IncrementalWitness<Node>)>,
-) -> Result<Vec<Nullifier>, Box<dyn Error>> {
+) -> Result<(Vec<Nullifier>, Vec<String>), Box<dyn Error>> {
     let tx = Transaction::read(
         Cursor::new(hex::decode(tx)?),
         pivx_primitives::consensus::BranchId::Sapling,
@@ -207,13 +213,13 @@ pub fn handle_transaction_internal(
         decrypt_transaction(&MAIN_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
     };
     let mut nullifiers: Vec<Nullifier> = vec![];
+    let mut memos = vec![];
     if let Some(sapling) = tx.sapling_bundle() {
         for x in sapling.shielded_spends() {
             nullifiers.push(*x.nullifier());
         }
 
         for (i, out) in sapling.shielded_outputs().iter().enumerate() {
-            println!("note found!");
             tree.append(Node::from_cmu(out.cmu()))
                 .map_err(|_| "Failed to add cmu to tree")?;
             for (_, witness) in witnesses.iter_mut() {
@@ -226,11 +232,22 @@ pub fn handle_transaction_internal(
                     // Save witness
                     let witness = IncrementalWitness::from_tree(tree);
                     witnesses.push((note.note.clone(), witness));
+                    // Save Memo
+                    let memo = Memo::from_bytes(note.memo.as_slice())
+                        .and_then(|m| {
+                            if let Memo::Text(e) = m {
+                                Ok((&*e).to_owned())
+                            } else {
+                                Ok(String::new())
+                            }
+                        })
+                        .unwrap_or_default();
+                    memos.push(memo);
                 }
             }
         }
     }
-    Ok(nullifiers)
+    Ok((nullifiers, memos))
 }
 
 #[wasm_bindgen]
@@ -289,6 +306,7 @@ pub struct JSTxOptions {
     notes: Option<Vec<(Note, String)>>,
     utxos: Option<Vec<Utxo>>,
     extsk: String,
+    memo: String,
     to_address: String,
     change_address: String,
     amount: u64,
@@ -307,6 +325,7 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
         block_height,
         is_testnet,
         utxos,
+        memo,
     } = serde_wasm_bindgen::from_value::<JSTxOptions>(options)?;
     assert!(
         !(notes.is_some() && utxos.is_some()),
@@ -318,6 +337,7 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
     } else {
         Network::MainNetwork
     };
+    let memo = Memo::from_str(&memo).map_err(|_| "Can't convert string to memo")?;
     let input = if let Some(mut notes) = notes {
         notes.sort_by_key(|(note, _)| note.value().inner());
         Either::Left(notes)
@@ -333,6 +353,7 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
         &to_address,
         &change_address,
         amount,
+        &memo,
         BlockHeight::from_u32(block_height),
         network,
     )
@@ -351,6 +372,7 @@ pub async fn create_transaction_internal(
     to_address: &str,
     change_address: &str,
     mut amount: u64,
+    memo: &Memo,
     block_height: BlockHeight,
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
@@ -385,7 +407,7 @@ pub async fn create_transaction_internal(
             .add_transparent_output(&x, amount)
             .map_err(|_| "Failed to add output")?,
         GenericAddress::Shield(x) => builder
-            .add_sapling_output(None, x, amount, MemoBytes::empty())
+            .add_sapling_output(None, x, amount, memo.encode())
             .map_err(|_| "Failed to add output")?,
     }
 

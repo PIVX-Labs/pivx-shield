@@ -22,6 +22,7 @@ interface TransactionResult {
   decrypted_notes: [Note, string][];
   commitment_tree: string;
   nullifiers: string[];
+  memos: string[];
 }
 
 interface Transaction {
@@ -31,6 +32,7 @@ interface Transaction {
   useShieldInputs: boolean;
   utxos: UTXO[];
   transparentChangeAddress: string;
+  memo: string;
 }
 
 interface CreateTransactionReturnValue {
@@ -312,12 +314,15 @@ export class PIVXShield {
         await this.removeSpentNotes(res.nullifiers);
       }
     }
-    return res.decrypted_notes.filter(
-      (note) =>
-        !this.unspentNotes.some(
-          (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0]),
-        ),
-    );
+    return {
+      notes: res.decrypted_notes.filter(
+        (note) =>
+          !this.unspentNotes.some(
+            (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0]),
+          ),
+      ),
+      memos: res.memos,
+    };
   }
 
   /**
@@ -359,6 +364,7 @@ export class PIVXShield {
     useShieldInputs = true,
     utxos,
     transparentChangeAddress,
+    memo = "",
   }: Transaction) {
     if (!this.extsk) {
       throw new Error("You cannot create a transaction in view only mode!");
@@ -380,6 +386,7 @@ export class PIVXShield {
           amount,
           block_height: blockHeight,
           is_testnet: this.isTestnet,
+          memo,
         },
       );
 
@@ -388,7 +395,7 @@ export class PIVXShield {
     }
     this.pendingUnspentNotes.set(
       txid,
-      (await this.addTransaction(txhex, true)).map((n) => n[0]),
+      (await this.addTransaction(txhex, true)).notes.map((n) => n[0]),
     );
     return {
       hex: txhex,
