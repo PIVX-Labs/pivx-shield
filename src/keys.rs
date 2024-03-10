@@ -71,13 +71,30 @@ pub fn encode_extsk(extsk: &ExtendedSpendingKey, is_testnet: bool) -> String {
     encoding::encode_extended_spending_key(enc_str, extsk)
 }
 
-pub fn encode_payment_address(addr: &PaymentAddress, is_testnet: bool) -> String {
+pub fn encode_payment_address_internal(addr: &PaymentAddress, is_testnet: bool) -> String {
     let enc_str: &str = if is_testnet {
         TEST_NETWORK.hrp_sapling_payment_address()
     } else {
         MAIN_NETWORK.hrp_sapling_payment_address()
     };
     encoding::encode_payment_address(enc_str, addr)
+}
+
+#[wasm_bindgen]
+pub fn encode_payment_address(
+    is_testnet: bool,
+    ser_payment_address: &[u8],
+) -> Result<JsValue, JsValue> {
+    let enc_payment_address = encode_payment_address_internal(
+        &PaymentAddress::from_bytes(
+            &ser_payment_address
+                .try_into()
+                .map_err(|_| "Bad ser_payment_address")?,
+        )
+        .ok_or("Failed to deserialize payment address")?,
+        is_testnet,
+    );
+    Ok(serde_wasm_bindgen::to_value(&enc_payment_address)?)
 }
 
 pub fn decode_extended_full_viewing_key(
@@ -136,7 +153,7 @@ pub fn generate_default_payment_address(
         decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
     let (def_index, def_address) = extfvk.to_diversifiable_full_viewing_key().default_address();
     Ok(serde_wasm_bindgen::to_value(&NewAddress {
-        address: encode_payment_address(&def_address, is_testnet),
+        address: encode_payment_address_internal(&def_address, is_testnet),
         diversifier_index: def_index.0.to_vec(),
     })?)
 }
@@ -163,7 +180,7 @@ pub fn generate_next_shielding_payment_address(
         .ok_or("No valid indeces left")?; // There are so many valid addresses this should never happen
 
     Ok(serde_wasm_bindgen::to_value(&NewAddress {
-        address: encode_payment_address(&address, is_testnet),
+        address: encode_payment_address_internal(&address, is_testnet),
         diversifier_index: new_index.0.to_vec(),
     })?)
 }
