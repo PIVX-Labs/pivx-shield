@@ -295,6 +295,28 @@ export class PIVXShield {
     this.lastProcessedBlock = block.height;
   }
 
+
+  /**
+   *
+   * @param note - Note and its corresponding witness
+   * Generate the nullifier for a given pair note, witness
+   */
+  async generateNullifierFromNote(note: [Note, String]) {
+    return await this.callWorker<string>(
+      "get_nullifier_from_note",
+      note,
+      this.extfvk,
+      this.isTestnet,
+    );
+  }
+
+  private async getShieldAddressFromNote(note: Note) {
+    return await this.callWorker<string>(
+      "encode_payment_address",
+      this.isTestnet,
+      note.recipient,
+    );
+  }
   async addTransaction(hex: string, decryptOnly = false) {
     const res = await this.callWorker<TransactionResult>(
       "handle_transaction",
