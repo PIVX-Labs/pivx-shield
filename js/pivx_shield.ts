@@ -504,6 +504,11 @@ export interface Note {
   rseed: number[];
 }
 
+export interface SimplifiedNote {
+  recipient: string;
+  value: number;
+}
+
 export interface ShieldData {
   extfvk: string;
   lastProcessedBlock: number;
