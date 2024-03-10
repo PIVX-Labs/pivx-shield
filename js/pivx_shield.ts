@@ -317,6 +317,17 @@ export class PIVXShield {
       note.recipient,
     );
   }
+  async decryptTransactionOutputs(hex: string) {
+    const res = await this.addTransaction(hex, true);
+    const simplifiedNotes = [];
+    for (const [note, _] of res) {
+      simplifiedNotes.push({
+        value: note.value,
+        recipient: await this.getShieldAddressFromNote(note),
+      });
+    }
+    return simplifiedNotes;
+  }
   async addTransaction(hex: string, decryptOnly = false) {
     const res = await this.callWorker<TransactionResult>(
       "handle_transaction",
