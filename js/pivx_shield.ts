@@ -302,7 +302,7 @@ export class PIVXShield {
       hex,
       this.extfvk,
       this.isTestnet,
-      this.unspentNotes,
+      decryptOnly ? [] : this.unspentNotes,
     );
     if (!decryptOnly) {
       this.commitmentTree = res.commitment_tree;
