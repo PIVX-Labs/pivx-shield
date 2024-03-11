@@ -88,6 +88,14 @@ export class PIVXShield {
    */
   private pendingUnspentNotes: Map<string, Note[]> = new Map();
 
+  /**
+   *
+   * @private
+   * Map nullifier -> Note
+   * It contains all notes in the history of the wallet, both spent and unspent
+   */
+  private mapNullifierNote: Map<string, SimplifiedNote> = new Map();
+
   private promises: Map<
     string,
     { res: (...args: any) => void; rej: (...args: any) => void }
@@ -248,6 +256,7 @@ export class PIVXShield {
       diversifierIndex: this.diversifierIndex,
       unspentNotes: this.unspentNotes,
       isTestnet: this.isTestnet,
+      mapNullifierNote: Object.fromEntries(this.mapNullifierNote),
     });
   }
   /**
@@ -273,6 +282,9 @@ export class PIVXShield {
       shieldData.lastProcessedBlock,
       shieldData.commitmentTree,
     );
+    pivxShield.mapNullifierNote = new Map(
+      Object.entries(shieldData.mapNullifierNote),
+    );
     pivxShield.diversifierIndex = shieldData.diversifierIndex;
     pivxShield.unspentNotes = shieldData.unspentNotes;
     return pivxShield;
@@ -289,12 +301,54 @@ export class PIVXShield {
       );
     }
     for (const tx of block.txs) {
-      await this.addTransaction(tx.hex);
+      const decryptedNotes = await this.addTransaction(tx.hex);
+      // Add all the decryptedNotes to the Nullifier->Note map
+      for (const note of decryptedNotes) {
+        const nullifier = await this.generateNullifierFromNote(note);
+        const simplifiedNote = {
+          value: note[0].value,
+          recipient: await this.getShieldAddressFromNote(note[0]),
+        };
+        this.mapNullifierNote.set(nullifier, simplifiedNote);
+      }
+      // Delete the corresponding pending transaction
       this.pendingUnspentNotes.delete(tx.txid);
     }
     this.lastProcessedBlock = block.height;
   }
 
+  /**
+   *
+   * @param note - Note and its corresponding witness
+   * Generate the nullifier for a given pair note, witness
+   */
+  private async generateNullifierFromNote(note: [Note, String]) {
+    return await this.callWorker<string>(
+      "get_nullifier_from_note",
+      note,
+      this.extfvk,
+      this.isTestnet,
+    );
+  }
+
+  private async getShieldAddressFromNote(note: Note) {
+    return await this.callWorker<string>(
+      "encode_payment_address",
+      this.isTestnet,
+      note.recipient,
+    );
+  }
+  async decryptTransactionOutputs(hex: string) {
+    const res = await this.addTransaction(hex, true);
+    const simplifiedNotes = [];
+    for (const [note, _] of res) {
+      simplifiedNotes.push({
+        value: note.value,
+        recipient: await this.getShieldAddressFromNote(note),
+      });
+    }
+    return simplifiedNotes;
+  }
   async addTransaction(hex: string, decryptOnly = false) {
     const res = await this.callWorker<TransactionResult>(
       "handle_transaction",
@@ -464,6 +518,14 @@ export class PIVXShield {
   getLastSyncedBlock() {
     return this.lastProcessedBlock;
   }
+
+  /**
+   * @param nullifier - A sapling nullifier
+   * @returns the Note corresponding to a given nullifier
+   */
+  getNoteFromNullifier(nullifier: string) {
+    return this.mapNullifierNote.get(nullifier);
+  }
 }
 
 export interface UTXO {
@@ -478,6 +540,11 @@ export interface Note {
   recipient: number[];
   value: number;
   rseed: number[];
+}
+
+export interface SimplifiedNote {
+  recipient: string;
+  value: number;
 }
 
 export interface ShieldData {
