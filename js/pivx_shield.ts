@@ -464,6 +464,30 @@ export class PIVXShield {
   getLastSyncedBlock() {
     return this.lastProcessedBlock;
   }
+
+  /**
+   * @returns sapling root
+   */
+  async getSaplingRoot(): Promise<string> {
+    return await this.callWorker<string>(
+      "get_sapling_root",
+      this.commitmentTree,
+    );
+  }
+
+  /**
+   * Reloads from checkpoint. Needs to be resynced to use
+   */
+  async reloadFromCheckpoint(checkpointBlock: number): Promise<void> {
+    const [effectiveHeight, commitmentTree] = await this.callWorker<
+      [number, string]
+    >("get_closest_checkpoint", checkpointBlock, this.isTestnet);
+    this.commitmentTree = commitmentTree;
+    this.lastProcessedBlock = effectiveHeight;
+    this.unspentNotes = [];
+    this.pendingSpentNotes = new Map();
+    this.pendingUnspentNotes = new Map();
+  }
 }
 
 export interface UTXO {
