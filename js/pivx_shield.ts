@@ -293,15 +293,20 @@ export class PIVXShield {
   /**
    * Loop through the txs of a block and update useful shield data
    * @param block - block outputted from any PIVX node
+   * @returns list of transactions belonging to the wallet
    */
   async handleBlock(block: Block) {
+    let walletTransactions : string[] = [];
     if (this.lastProcessedBlock > block.height) {
       throw new Error(
         "Blocks must be processed in a monotonically increasing order!",
       );
     }
     for (const tx of block.txs) {
-      const decryptedNotes = await this.addTransaction(tx.hex);
+      const {belongToWallet, decryptedNotes} = await this.addTransaction(tx.hex);
+      if(belongToWallet){
+        walletTransactions.push(tx.hex);
+      }
       // Add all the decryptedNotes to the Nullifier->Note map
       for (const note of decryptedNotes) {
         const nullifier = await this.generateNullifierFromNote(note);
@@ -315,6 +320,7 @@ export class PIVXShield {
       this.pendingUnspentNotes.delete(tx.txid);
     }
     this.lastProcessedBlock = block.height;
+    return walletTransactions;
   }
 
   /**
@@ -339,9 +345,9 @@ export class PIVXShield {
     );
   }
   async decryptTransactionOutputs(hex: string) {
-    const res = await this.addTransaction(hex, true);
+    const { decryptedNotes } = await this.addTransaction(hex, true);
     const simplifiedNotes = [];
-    for (const [note, _] of res) {
+    for (const [note, _] of decryptedNotes) {
       simplifiedNotes.push({
         value: note.value,
         recipient: await this.getShieldAddressFromNote(note),
@@ -366,7 +372,15 @@ export class PIVXShield {
         await this.removeSpentNotes(res.nullifiers);
       }
     }
-    return res.decrypted_notes;
+    // Check if the transaction belongs to the wallet
+    let belongToWallet = res.decrypted_notes.length > 0;
+    for (const nullifier of res.nullifiers) {
+      if(belongToWallet){
+        break
+      }
+      belongToWallet = belongToWallet || this.mapNullifierNote.has(nullifier);
+    }
+    return {belongToWallet, decryptedNotes: res.decrypted_notes};
   }
 
   /**
@@ -435,7 +449,7 @@ export class PIVXShield {
     if (useShieldInputs) {
       this.pendingSpentNotes.set(txid, nullifiers);
     }
-    const decryptedNewNotes = (await this.addTransaction(txhex, true)).filter(
+    const decryptedNewNotes = (await this.addTransaction(txhex, true)).decryptedNotes.filter(
       (note) =>
         !this.unspentNotes.some(
           (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0]),
