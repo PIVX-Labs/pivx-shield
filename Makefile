@@ -1,3 +1,5 @@
+TAG?=latest
+
 .PHONY: all
 all: pkg pkg_multicore js/pivx_shield.js js/README.md
 
@@ -26,9 +28,9 @@ js/node_modules: js/package.json
 
 .PHONY: publish
 publish: all
-	cd pkg; npm publish
-	cd pkg_multicore; npm publish
-	cd js; npm publish
+	cd pkg; npm publish --tag $(TAG)
+	cd pkg_multicore; npm publish --tag $(TAG)
+	cd js; npm publish --tag $(TAG)
 
 .PHONE: pack
 pack: all
