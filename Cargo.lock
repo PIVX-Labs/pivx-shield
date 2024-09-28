@@ -143,8 +143,8 @@ dependencies = [
  "blake2s_simd",
  "byteorder",
  "crossbeam-channel",
- "ff 0.12.1",
- "group 0.12.1",
+ "ff",
+ "group",
  "lazy_static",
  "log",
  "num_cpus",
@@ -254,20 +254,9 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3c196a77437e7cc2fb515ce413a6401291578b5afc8ecb29a3c7ab957f05941"
 dependencies = [
- "ff 0.12.1",
- "group 0.12.1",
+ "ff",
+ "group",
  "pairing",
- "rand_core",
- "subtle",
-]
-
-[[package]]
-name = "bls12_381"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7bc6d6292be3a19e6379786dac800f551e5865a5bb51ebbe3064ab80433f403"
-dependencies = [
- "ff 0.13.0",
  "rand_core",
  "subtle",
 ]
@@ -573,17 +562,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ff"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ded41244b729663b1e574f1b4fb731469f69f79c17667b5d776b16cda0479449"
-dependencies = [
- "bitvec",
- "rand_core",
- "subtle",
-]
-
-[[package]]
 name = "fixedbitset"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -724,19 +702,8 @@ version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5dfbfb3a6cfbd390d5c9564ab283a0349b9b9fcd46a706c1eb10e0db70bfbac7"
 dependencies = [
- "ff 0.12.1",
+ "ff",
  "memuse",
- "rand_core",
- "subtle",
-]
-
-[[package]]
-name = "group"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0f9ef7462f7c099f518d754361858f86d8a07af53ba9af0fe635bbccb151a63"
-dependencies = [
- "ff 0.13.0",
  "rand_core",
  "subtle",
 ]
@@ -768,8 +735,8 @@ checksum = "85e10bf9924da1754e443641c9e7f9f00483749f8fb837fde696ef6ed6e2f079"
 dependencies = [
  "arrayvec",
  "bitvec",
- "ff 0.12.1",
- "group 0.12.1",
+ "ff",
+ "group",
  "halo2_proofs",
  "lazy_static",
  "pasta_curves",
@@ -785,8 +752,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cff771b9a2445cd2545c9ef26d863c290fbb44ae440c825a20eb7156f67a949a"
 dependencies = [
  "blake2b_simd",
- "ff 0.12.1",
- "group 0.12.1",
+ "ff",
+ "group",
  "pasta_curves",
  "rand_core",
  "rayon",
@@ -1018,23 +985,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a575df5f985fe1cd5b2b05664ff6accfc46559032b954529fd225a2168d27b0f"
 dependencies = [
  "bitvec",
- "bls12_381 0.7.1",
- "ff 0.12.1",
- "group 0.12.1",
- "rand_core",
- "subtle",
-]
-
-[[package]]
-name = "jubjub"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8499f7a74008aafbecb2a2e608a3e13e4dd3e84df198b604451efe93f2de6e61"
-dependencies = [
- "bitvec",
- "bls12_381 0.8.0",
- "ff 0.13.0",
- "group 0.13.0",
+ "bls12_381",
+ "ff",
+ "group",
  "rand_core",
  "subtle",
 ]
@@ -1304,9 +1257,9 @@ dependencies = [
  "aes",
  "bitvec",
  "blake2b_simd",
- "ff 0.12.1",
+ "ff",
  "fpe",
- "group 0.12.1",
+ "group",
  "halo2_gadgets",
  "halo2_proofs",
  "hex",
@@ -1329,7 +1282,7 @@ version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "135590d8bdba2b31346f9cd1fb2a912329f5135e832a4f422942eb6ead8b6b3b"
 dependencies = [
- "group 0.12.1",
+ "group",
 ]
 
 [[package]]
@@ -1373,8 +1326,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5cc65faf8e7313b4b1fbaa9f7ca917a0eed499a9663be71477f87993604341d8"
 dependencies = [
  "blake2b_simd",
- "ff 0.12.1",
- "group 0.12.1",
+ "ff",
+ "group",
  "lazy_static",
  "rand",
  "static_assertions",
@@ -1421,14 +1374,14 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "pivx-shield-rust"
-version = "1.1.5"
+version = "1.1.6"
 dependencies = [
  "async_once",
  "console_error_panic_hook",
  "either",
  "getrandom",
  "hex",
- "jubjub 0.10.0",
+ "jubjub",
  "lazy_static",
  "pivx_client_backend",
  "pivx_primitives",
@@ -1466,10 +1419,10 @@ source = "git+https://github.com/Duddino/librustpivx#fd9ecad72c0b8e17120e36a026b
 dependencies = [
  "base64 0.13.1",
  "bech32",
- "bls12_381 0.7.1",
+ "bls12_381",
  "bs58",
  "crossbeam-channel",
- "group 0.12.1",
+ "group",
  "memuse",
  "nom",
  "orchard",
@@ -1519,16 +1472,16 @@ dependencies = [
  "bitvec",
  "blake2b_simd",
  "blake2s_simd",
- "bls12_381 0.7.1",
+ "bls12_381",
  "byteorder",
  "equihash",
- "ff 0.12.1",
+ "ff",
  "fpe",
- "group 0.12.1",
+ "group",
  "hdwallet",
  "hex",
  "incrementalmerkletree",
- "jubjub 0.9.0",
+ "jubjub",
  "lazy_static",
  "memuse",
  "nonempty",
@@ -1553,10 +1506,10 @@ source = "git+https://github.com/Duddino/librustpivx#fd9ecad72c0b8e17120e36a026b
 dependencies = [
  "bellman",
  "blake2b_simd",
- "bls12_381 0.7.1",
+ "bls12_381",
  "directories",
- "group 0.12.1",
- "jubjub 0.9.0",
+ "group",
+ "jubjub",
  "lazy_static",
  "pivx_primitives",
  "rand_core",
@@ -1744,8 +1697,8 @@ checksum = "4cc8038c8b7e481bdf688d0585d4897ed0e9e0cee10aa365dde51238c20e4182"
 dependencies = [
  "blake2b_simd",
  "byteorder",
- "group 0.12.1",
- "jubjub 0.9.0",
+ "group",
+ "jubjub",
  "pasta_curves",
  "rand_core",
  "serde",
@@ -1762,7 +1715,7 @@ dependencies = [
  "blake2b_simd",
  "byteorder",
  "digest 0.9.0",
- "jubjub 0.9.0",
+ "jubjub",
  "rand_core",
  "serde",
  "thiserror",

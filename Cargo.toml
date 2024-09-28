@@ -30,7 +30,7 @@ pivx_proofs = { git = "https://github.com/Duddino/librustpivx", default-features
 serde = { version = "1.0", features = ["derive"] }
 serde-wasm-bindgen = "0.6.5"
 serde_json = "1.0.128"
-jubjub = "0.10"
+jubjub = "0.9"
 hex = "0.4.3"
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
