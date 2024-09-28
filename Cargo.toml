@@ -1,6 +1,6 @@
 [package]
 name = "pivx-shield-rust"
-version = "1.1.5"
+version = "1.1.6"
 authors = ["Duddino <duddino@duddino.com>", "Alessandro Rezzi <alessandrorezzi2000@gmail.com>"]
 edition = "2021"
 description = "WASM library for interoperation with the PIVX Shield sapling protocol."
@@ -15,36 +15,36 @@ default = ["console_error_panic_hook"]
 multicore = ["pivx_proofs/multicore", "wasm-bindgen-rayon"]
 
 [dependencies]
-tokio = { version = "1.26.0", default-features = false, features = ["sync", "macros"] }
-rayon = "1.7.0"
-lazy_static = "1.4.0"
+tokio = { version = "1.40.0", default-features = false, features = ["sync", "macros"] }
+rayon = "1.10.0"
+lazy_static = "1.5.0"
 async_once = "0.2.6"
-sha256 = { version = "1.1.2", default-features = false }
-getrandom = { version = "0.2", features = ["js"] }
-reqwest = { version = "0.11.14", features = ["blocking"] }
-wasm-bindgen = "=0.2.84" # Wasm-bindgen makes stdweb fail to compile. See https://github.com/koute/stdweb/issues/427
-wasm-bindgen-futures = "0.4.34"
+sha256 = { version = "1.5.0", default-features = false }
+getrandom = { version = "0.2.15", features = ["js"] }
+reqwest = { version = "0.12.0", features = ["blocking"] }
+wasm-bindgen = "0.2.93" # Wasm-bindgen makes stdweb fail to compile. See https://github.com/koute/stdweb/issues/427
+wasm-bindgen-futures = "0.4.43"
 pivx_client_backend = { git = "https://github.com/Duddino/librustpivx" }
 pivx_primitives = { git = "https://github.com/Duddino/librustpivx", default-features = false, features = ["transparent-inputs"] }
 pivx_proofs = { git = "https://github.com/Duddino/librustpivx", default-features = false, features = ["local-prover"] }
 serde = { version = "1.0", features = ["derive"] }
-serde-wasm-bindgen = "0.4.5"
-serde_json = "1.0.93"
+serde-wasm-bindgen = "0.6.5"
+serde_json = "1.0.128"
 jubjub = "0.9"
 hex = "0.4.3"
 # The `console_error_panic_hook` crate provides better debugging of panics by
 # logging them with `console.error`. This is great for development, but requires
 # all the `std::fmt` and `std::panicking` infrastructure, so isn't great for
 # code size when deploying.
-console_error_panic_hook = { version = "0.1.6", optional = true }
+console_error_panic_hook = { version = "0.1.7", optional = true }
 
-secp256k1 = "0.21"
-either = "1.8.1"
-wasm-bindgen-rayon = { version = "1.0.3", optional = true }
+secp256k1 = "0.21.3"
+either = "1.13.0"
+wasm-bindgen-rayon = { version = "1.2.1", optional = true }
 rand_core = "0.6.4"
 
 [dev-dependencies]
-tokio = { version = "1.26.0", features = ["full"] } 
+tokio = { version = "1.40.0", features = ["full"] } 
 wasm-bindgen-test = "0.3.13"
 
 [profile.release]
