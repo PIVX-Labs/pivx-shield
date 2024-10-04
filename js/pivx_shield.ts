@@ -296,15 +296,18 @@ export class PIVXShield {
    * @returns list of transactions belonging to the wallet
    */
   async handleBlock(block: Block) {
-    let walletTransactions : string[] = [];
+    let walletTransactions: string[] = [];
     if (this.lastProcessedBlock > block.height) {
       throw new Error(
         "Blocks must be processed in a monotonically increasing order!",
       );
     }
     for (const tx of block.txs) {
-      const {belongToWallet, decryptedNotes} = await this.addTransaction(tx.hex);
-      if(belongToWallet){
+      const { belongToWallet, decryptedNotes } = await this.decryptTransaction(
+        tx.hex,
+      );
+      await this.addTransaction(tx.hex);
+      if (belongToWallet) {
         walletTransactions.push(tx.hex);
       }
       // Add all the decryptedNotes to the Nullifier->Note map
@@ -345,7 +348,7 @@ export class PIVXShield {
     );
   }
   async decryptTransactionOutputs(hex: string) {
-    const { decryptedNotes } = await this.addTransaction(hex, true);
+    const { decryptedNotes } = await this.decryptTransaction(hex);
     const simplifiedNotes = [];
     for (const [note, _] of decryptedNotes) {
       simplifiedNotes.push({
@@ -355,32 +358,41 @@ export class PIVXShield {
     }
     return simplifiedNotes;
   }
-  async addTransaction(hex: string, decryptOnly = false) {
+  async addTransaction(hex: string) {
     const res = await this.callWorker<TransactionResult>(
       "handle_transaction",
       this.commitmentTree,
       hex,
       this.extfvk,
       this.isTestnet,
-      decryptOnly ? [] : this.unspentNotes,
+      this.unspentNotes,
     );
-    if (!decryptOnly) {
-      this.commitmentTree = res.commitment_tree;
-      this.unspentNotes = res.decrypted_notes;
+    this.commitmentTree = res.commitment_tree;
+    this.unspentNotes = res.decrypted_notes;
 
-      if (res.nullifiers.length > 0) {
-        await this.removeSpentNotes(res.nullifiers);
-      }
+    if (res.nullifiers.length > 0) {
+      await this.removeSpentNotes(res.nullifiers);
     }
-    // Check if the transaction belongs to the wallet
+  }
+
+  async decryptTransaction(hex: string) {
+    const res = await this.callWorker<TransactionResult>(
+      "handle_transaction",
+      this.commitmentTree,
+      hex,
+      this.extfvk,
+      this.isTestnet,
+      [],
+    );
+    // Check if the transaction belongs to the wallet:
     let belongToWallet = res.decrypted_notes.length > 0;
     for (const nullifier of res.nullifiers) {
-      if(belongToWallet){
-        break
+      if (belongToWallet) {
+        break;
       }
       belongToWallet = belongToWallet || this.mapNullifierNote.has(nullifier);
     }
-    return {belongToWallet, decryptedNotes: res.decrypted_notes};
+    return { belongToWallet, decryptedNotes: res.decrypted_notes };
   }
 
   /**
@@ -449,16 +461,10 @@ export class PIVXShield {
     if (useShieldInputs) {
       this.pendingSpentNotes.set(txid, nullifiers);
     }
-    const decryptedNewNotes = (await this.addTransaction(txhex, true)).decryptedNotes.filter(
-      (note) =>
-        !this.unspentNotes.some(
-          (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0]),
-        ),
-    );
-
+    const { decryptedNotes } = await this.decryptTransaction(txhex);
     this.pendingUnspentNotes.set(
       txid,
-      decryptedNewNotes.map((n) => n[0]),
+      decryptedNotes.map((n) => n[0]),
     );
     return {
       hex: txhex,
