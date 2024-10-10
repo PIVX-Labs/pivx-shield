@@ -283,11 +283,17 @@ export class PIVXShield {
       shieldData.commitmentTree,
     );
     pivxShield.mapNullifierNote = new Map(
-      Object.entries(shieldData.mapNullifierNote),
+      Object.entries(shieldData.mapNullifierNote ?? {}),
     );
     pivxShield.diversifierIndex = shieldData.diversifierIndex;
     pivxShield.unspentNotes = shieldData.unspentNotes;
-    return pivxShield;
+
+    // Shield activity update: mapNullifierNote must be present in the shieldData
+    let success = true;
+    if (!shieldData.mapNullifierNote) {
+      success = false;
+    }
+    return { pivxShield, success };
   }
 
   /**
