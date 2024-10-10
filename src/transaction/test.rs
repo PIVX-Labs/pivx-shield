@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use crate::transaction::create_transaction_internal;
+use crate::transaction::{create_transaction_internal, get_nullifier_from_note_internal};
 
 use super::handle_transaction_internal;
 use either::Either;
@@ -15,6 +15,7 @@ use pivx_primitives::sapling::value::NoteValue;
 use pivx_primitives::sapling::Node;
 use pivx_primitives::sapling::Note;
 use pivx_primitives::sapling::Rseed::BeforeZip212;
+use pivx_primitives::zip32::Scope;
 use std::error::Error;
 use std::io::Cursor;
 
@@ -92,7 +93,7 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
     path.write(&mut path_vec)?;
     let path = hex::encode(path_vec);
     let tx = create_transaction_internal(
-        Either::Left(vec![(note.clone(), path)]),
+        Either::Left(vec![(note.clone(), path.clone())]),
         &extended_spending_key,
         output,
         address,
@@ -108,7 +109,15 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
         nullifier,
         "5269442d8022af933774f9f22775566d92089a151ba733f6d751f5bb65a7f56d"
     );
-    // When we implement mempool, test that new notes work correctly
+    // Verify that get_nullifier_from_note_internal yields the same nullifier
+    assert_eq!(
+        get_nullifier_from_note_internal(
+            extended_spending_key.to_extended_full_viewing_key(),
+            note.clone(),
+            path
+        )?,
+        "5269442d8022af933774f9f22775566d92089a151ba733f6d751f5bb65a7f56d"
+    );
 
     Ok(())
 }
