@@ -14,6 +14,8 @@ pub use pivx_primitives::transaction::builder::Progress;
 use crate::keys::decode_generic_address;
 use crate::keys::GenericAddress;
 use async_once::AsyncOnce;
+#[cfg(feature = "multicore")]
+use atomic_float::AtomicF32;
 pub use either::Either;
 use lazy_static::lazy_static;
 pub use pivx_primitives::sapling::{note::Note, Node, Nullifier};
@@ -33,7 +35,7 @@ pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 pub use std::path::Path;
 #[cfg(feature = "multicore")]
-use std::sync::Mutex;
+use std::sync::atomic::Ordering;
 pub use std::{collections::HashMap, error::Error, io::Cursor};
 #[cfg(feature = "multicore")]
 use tokio::{join, sync::mpsc::Receiver, sync::mpsc::Sender};
@@ -48,9 +50,8 @@ lazy_static! {
     });
 }
 #[cfg(feature = "multicore")]
-lazy_static! {
-    static ref TX_PROGRESS_LOCK: Mutex<f32> = Mutex::new(0.0);
-}
+static TX_PROGRESS_LOCK: AtomicF32 = AtomicF32::new(0.0);
+
 fn fee_calculator(
     transparent_input_count: u64,
     transparent_output_count: u64,
@@ -102,9 +103,7 @@ async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
 #[wasm_bindgen]
 #[cfg(feature = "multicore")]
 pub fn read_tx_progress() -> f32 {
-    *TX_PROGRESS_LOCK
-        .lock()
-        .expect("Cannot lock the tx progress mutex")
+    TX_PROGRESS_LOCK.load(Ordering::Relaxed)
 }
 
 #[wasm_bindgen]
@@ -115,10 +114,7 @@ pub fn read_tx_progress() -> f32 {
 
 #[cfg(feature = "multicore")]
 pub fn set_tx_status(val: f32) {
-    let mut tx_progress = TX_PROGRESS_LOCK
-        .lock()
-        .expect("Cannot lock the progress mutex");
-    *tx_progress = val;
+    TX_PROGRESS_LOCK.store(val, Ordering::Relaxed);
 }
 #[wasm_bindgen]
 pub async fn load_prover() -> bool {
@@ -410,12 +406,9 @@ pub async fn create_transaction_internal(
         let tx_progress_future = async {
             loop {
                 if let Some(status) = receiver.recv().await {
-                    let mut tx_progress = TX_PROGRESS_LOCK
-                        .lock()
-                        .expect("Cannot lock the progress mutex");
                     match status.end() {
-                        Some(x) => *tx_progress = (status.cur() as f32) / (x as f32),
-                        None => *tx_progress = 0.0,
+                        Some(x) => set_tx_status((status.cur() as f32) / (x as f32)),
+                        None => set_tx_status(0.0),
                     }
                 } else {
                     set_tx_status(0.0);
