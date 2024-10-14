@@ -88,6 +88,14 @@ export class PIVXShield {
    */
   private pendingUnspentNotes: Map<string, Note[]> = new Map();
 
+  /**
+   *
+   * @private
+   * Map nullifier -> Note
+   * It contains all notes in the history of the wallet, both spent and unspent
+   */
+  private mapNullifierNote: Map<string, SimplifiedNote> = new Map();
+
   private promises: Map<
     string,
     { res: (...args: any) => void; rej: (...args: any) => void }
@@ -248,6 +256,7 @@ export class PIVXShield {
       diversifierIndex: this.diversifierIndex,
       unspentNotes: this.unspentNotes,
       isTestnet: this.isTestnet,
+      mapNullifierNote: Object.fromEntries(this.mapNullifierNote),
     });
   }
   /**
@@ -273,46 +282,123 @@ export class PIVXShield {
       shieldData.lastProcessedBlock,
       shieldData.commitmentTree,
     );
+    pivxShield.mapNullifierNote = new Map(
+      Object.entries(shieldData.mapNullifierNote ?? {}),
+    );
     pivxShield.diversifierIndex = shieldData.diversifierIndex;
     pivxShield.unspentNotes = shieldData.unspentNotes;
-    return pivxShield;
+
+    // Shield activity update: mapNullifierNote must be present in the shieldData
+    let success = true;
+    if (!shieldData.mapNullifierNote) {
+      success = false;
+    }
+    return { pivxShield, success };
   }
 
   /**
    * Loop through the txs of a block and update useful shield data
    * @param block - block outputted from any PIVX node
+   * @returns list of transactions belonging to the wallet
    */
   async handleBlock(block: Block) {
+    let walletTransactions: string[] = [];
     if (this.lastProcessedBlock > block.height) {
       throw new Error(
         "Blocks must be processed in a monotonically increasing order!",
       );
     }
     for (const tx of block.txs) {
+      const { belongToWallet, decryptedNotes } = await this.decryptTransaction(
+        tx.hex,
+      );
       await this.addTransaction(tx.hex);
+      if (belongToWallet) {
+        walletTransactions.push(tx.hex);
+      }
+      // Add all the decryptedNotes to the Nullifier->Note map
+      for (const note of decryptedNotes) {
+        const nullifier = await this.generateNullifierFromNote(note);
+        const simplifiedNote = {
+          value: note[0].value,
+          recipient: await this.getShieldAddressFromNote(note[0]),
+        };
+        this.mapNullifierNote.set(nullifier, simplifiedNote);
+      }
+      // Delete the corresponding pending transaction
       this.pendingUnspentNotes.delete(tx.txid);
     }
     this.lastProcessedBlock = block.height;
+    return walletTransactions;
   }
 
-  async addTransaction(hex: string, decryptOnly = false) {
+  /**
+   *
+   * @param note - Note and its corresponding witness
+   * Generate the nullifier for a given pair note, witness
+   */
+  private async generateNullifierFromNote(note: [Note, String]) {
+    return await this.callWorker<string>(
+      "get_nullifier_from_note",
+      note,
+      this.extfvk,
+      this.isTestnet,
+    );
+  }
+
+  private async getShieldAddressFromNote(note: Note) {
+    return await this.callWorker<string>(
+      "encode_payment_address",
+      this.isTestnet,
+      note.recipient,
+    );
+  }
+  async decryptTransactionOutputs(hex: string) {
+    const { decryptedNotes } = await this.decryptTransaction(hex);
+    const simplifiedNotes = [];
+    for (const [note, _] of decryptedNotes) {
+      simplifiedNotes.push({
+        value: note.value,
+        recipient: await this.getShieldAddressFromNote(note),
+      });
+    }
+    return simplifiedNotes;
+  }
+  async addTransaction(hex: string) {
     const res = await this.callWorker<TransactionResult>(
       "handle_transaction",
       this.commitmentTree,
       hex,
       this.extfvk,
       this.isTestnet,
-      decryptOnly ? [] : this.unspentNotes,
+      this.unspentNotes,
     );
-    if (!decryptOnly) {
-      this.commitmentTree = res.commitment_tree;
-      this.unspentNotes = res.decrypted_notes;
+    this.commitmentTree = res.commitment_tree;
+    this.unspentNotes = res.decrypted_notes;
 
-      if (res.nullifiers.length > 0) {
-        await this.removeSpentNotes(res.nullifiers);
-      }
+    if (res.nullifiers.length > 0) {
+      await this.removeSpentNotes(res.nullifiers);
     }
-    return res.decrypted_notes;
+  }
+
+  async decryptTransaction(hex: string) {
+    const res = await this.callWorker<TransactionResult>(
+      "handle_transaction",
+      this.commitmentTree,
+      hex,
+      this.extfvk,
+      this.isTestnet,
+      [],
+    );
+    // Check if the transaction belongs to the wallet:
+    let belongToWallet = res.decrypted_notes.length > 0;
+    for (const nullifier of res.nullifiers) {
+      if (belongToWallet) {
+        break;
+      }
+      belongToWallet = belongToWallet || this.mapNullifierNote.has(nullifier);
+    }
+    return { belongToWallet, decryptedNotes: res.decrypted_notes };
   }
 
   /**
@@ -381,16 +467,10 @@ export class PIVXShield {
     if (useShieldInputs) {
       this.pendingSpentNotes.set(txid, nullifiers);
     }
-    const decryptedNewNotes = (await this.addTransaction(txhex, true)).filter(
-      (note) =>
-        !this.unspentNotes.some(
-          (note2) => JSON.stringify(note2[0]) === JSON.stringify(note[0]),
-        ),
-    );
-
+    const { decryptedNotes } = await this.decryptTransaction(txhex);
     this.pendingUnspentNotes.set(
       txid,
-      decryptedNewNotes.map((n) => n[0]),
+      decryptedNotes.map((n) => n[0]),
     );
     return {
       hex: txhex,
@@ -466,6 +546,13 @@ export class PIVXShield {
   }
 
   /**
+   * @param nullifier - A sapling nullifier
+   * @returns the Note corresponding to a given nullifier
+   */
+  getNoteFromNullifier(nullifier: string) {
+    return this.mapNullifierNote.get(nullifier);
+  }
+  /**
    * @returns sapling root
    */
   async getSaplingRoot(): Promise<string> {
@@ -487,6 +574,7 @@ export class PIVXShield {
     this.unspentNotes = [];
     this.pendingSpentNotes = new Map();
     this.pendingUnspentNotes = new Map();
+    this.mapNullifierNote = new Map();
   }
 }
 
@@ -502,6 +590,11 @@ export interface Note {
   recipient: number[];
   value: number;
   rseed: number[];
+}
+
+export interface SimplifiedNote {
+  recipient: string;
+  value: number;
 }
 
 export interface ShieldData {

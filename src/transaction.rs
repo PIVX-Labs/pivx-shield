@@ -25,6 +25,7 @@ use pivx_primitives::transaction::components::{OutPoint, TxOut};
 pub use pivx_primitives::transaction::fees::fixed::FeeRule;
 pub use pivx_primitives::transaction::Transaction;
 pub use pivx_primitives::zip32::AccountId;
+use pivx_primitives::zip32::ExtendedFullViewingKey;
 pub use pivx_primitives::zip32::ExtendedSpendingKey;
 pub use pivx_primitives::zip32::Scope;
 pub use pivx_proofs::prover::LocalTxProver;
@@ -262,6 +263,36 @@ pub fn remove_spent_notes(
         };
     }
     Ok(serde_wasm_bindgen::to_value(&unspent_notes)?)
+}
+
+#[wasm_bindgen]
+pub fn get_nullifier_from_note(
+    note_data: JsValue,
+    enc_extfvk: String,
+    is_testnet: bool,
+) -> Result<JsValue, JsValue> {
+    let extfvk =
+        decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
+    let (note, hex_witness): (Note, String) = serde_wasm_bindgen::from_value(note_data)?;
+    let ser_nullifiers =
+        get_nullifier_from_note_internal(extfvk, note, hex_witness).map_err(|e| e.to_string())?;
+    Ok(serde_wasm_bindgen::to_value(&ser_nullifiers)?)
+}
+
+pub fn get_nullifier_from_note_internal(
+    extfvk: ExtendedFullViewingKey,
+    note: Note,
+    hex_witness: String,
+) -> Result<String, Box<dyn Error>> {
+    let nullif_key = extfvk
+        .to_diversifiable_full_viewing_key()
+        .to_nk(Scope::External);
+    let witness = Cursor::new(hex::decode(hex_witness).map_err(|e| e.to_string())?);
+    let path = IncrementalWitness::<Node>::read(witness)
+        .map_err(|_| "Cannot read witness from buffer")?
+        .path()
+        .ok_or("Cannot find witness path")?;
+    Ok(hex::encode(note.nf(&nullif_key, path.position).0))
 }
 
 #[derive(Serialize, Deserialize)]
