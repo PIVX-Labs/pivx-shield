@@ -304,6 +304,27 @@ export class PIVXShield {
     return { pivxShield, success: currVersion == PIVXShield.version };
   }
 
+    async handleBlocks(blocks: Block[]) {
+	const walletTransactions: string[] = [];
+	const { decrypted_notes, nullifiers, commitment_tree } = await this.callWorker<TransactionResult>("handle_blocks", this.commitmentTree, blocks, this.extfvk, this.isTestnet, this.unspentNotes);
+	this.commitmentTree = commitment_tree;
+	this.unspentNotes = decrypted_notes;
+	for (const note of decrypted_notes) {
+	    const nullifier = await this.generateNullifierFromNote(note);
+            const simplifiedNote = {
+		value: note[0].value,
+		recipient: await this.getShieldAddressFromNote(note[0]),
+            };
+
+            this.mapNullifierNote.set(nullifier, simplifiedNote);
+	}
+	await this.removeSpentNotes(nullifiers);
+	this.lastProcessedBlock = blocks[blocks.length - 1]?.height ?? this.lastProcessedBlock;
+	// Delete the corresponding pending transaction
+	// this.pendingUnspentNotes.delete(tx.txid);
+	return walletTransactions;
+    }
+
   /**
    * Loop through the txs of a block and update useful shield data
    * @param block - block outputted from any PIVX node

@@ -90,6 +90,74 @@ pub struct JSTxSaplingData {
     pub commitment_tree: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Block {
+    height: u32,
+    txs: Vec<String>,
+}
+
+fn read_commitment_tree(tree_hex: &str) -> Result<CommitmentTree<Node>, Box<dyn Error>> {
+    let buff = Cursor::new(hex::decode(tree_hex)?);
+    Ok(CommitmentTree::<Node>::read(buff)?)
+}
+
+#[wasm_bindgen]
+pub fn handle_blocks(
+    tree_hex: &str,
+    blocks: JsValue,
+    enc_extfvk: &str,
+    is_testnet: bool,
+    comp_notes: JsValue,
+) -> Result<JsValue, JsValue> {
+    let blocks: Vec<Block> = serde_wasm_bindgen::from_value(blocks)?;
+    let mut tree = read_commitment_tree(tree_hex).map_err(|_| "Couldn't read commitment tree")?;
+    let comp_note: Vec<(Note, String)> = serde_wasm_bindgen::from_value(comp_notes)?;
+    let extfvk =
+        decode_extended_full_viewing_key(enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
+    let key = UnifiedFullViewingKey::new(Some(extfvk.to_diversifiable_full_viewing_key()), None)
+        .ok_or("Failed to create unified full viewing key")?;
+    let mut comp_note = comp_note
+        .into_iter()
+        .map(|(note, witness)| {
+            let wit = Cursor::new(hex::decode(witness).unwrap());
+            (note, IncrementalWitness::read(wit).unwrap())
+        })
+        .collect::<Vec<_>>();
+    let mut nullifiers = vec![];
+    for block in blocks {
+        for tx in block.txs {
+            nullifiers.extend(
+                handle_transaction_internal(&mut tree, &tx, &key, is_testnet, &mut comp_note)
+                    .map_err(|_| "Couldn't handle transaction")?,
+            );
+        }
+    }
+
+    let mut ser_comp_note: Vec<(Note, String)> = Vec::with_capacity(comp_note.len());
+    for (note, witness) in comp_note.iter() {
+        let mut buff = Vec::new();
+        witness
+            .write(&mut buff)
+            .map_err(|_| "Cannot write witness to buffer")?;
+        ser_comp_note.push((note.clone(), hex::encode(&buff)));
+    }
+
+    let mut ser_nullifiers: Vec<String> = Vec::with_capacity(nullifiers.len());
+    for nullif in nullifiers.iter() {
+        ser_nullifiers.push(hex::encode(nullif.0));
+    }
+
+    let mut buff = Vec::new();
+    tree.write(&mut buff)
+        .map_err(|_| "Cannot write tree to buffer")?;
+
+    Ok(serde_wasm_bindgen::to_value(&JSTxSaplingData {
+        decrypted_notes: ser_comp_note,
+        nullifiers: ser_nullifiers,
+        commitment_tree: hex::encode(buff),
+    })?)
+}
+
 //Input a tx and return: the updated commitment merkletree, all the nullifier found in the tx and all the node decoded with the corresponding witness
 #[wasm_bindgen]
 pub fn handle_transaction(
@@ -99,11 +167,7 @@ pub fn handle_transaction(
     is_testnet: bool,
     comp_notes: JsValue,
 ) -> Result<JsValue, JsValue> {
-    let buff = Cursor::new(
-        hex::decode(tree_hex).map_err(|_| "Cannot decode commitment tree from hexadecimal")?,
-    );
-    let mut tree =
-        CommitmentTree::<Node>::read(buff).map_err(|_| "Cannot decode commitment tree!")?;
+    let mut tree = read_commitment_tree(tree_hex).map_err(|_| "Couldn't read commitment tree")?;
     let extfvk =
         decode_extended_full_viewing_key(enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
     let key = UnifiedFullViewingKey::new(Some(extfvk.to_diversifiable_full_viewing_key()), None)
