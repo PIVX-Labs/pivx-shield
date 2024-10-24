@@ -41,6 +41,12 @@ interface CreateTransactionReturnValue {
 
 export class PIVXShield {
   /**
+   * integer to keep track of the current Shield version.
+   * v1: added mapNullifierNote
+   */
+  static version = 1;
+
+  /**
    * Webassembly object that holds Shield related functions
    */
   private shieldWorker: Worker;
@@ -250,6 +256,7 @@ export class PIVXShield {
    */
   save() {
     return JSON.stringify({
+      version: PIVXShield.version,
       extfvk: this.extfvk,
       lastProcessedBlock: this.lastProcessedBlock,
       commitmentTree: this.commitmentTree,
@@ -269,6 +276,8 @@ export class PIVXShield {
       new URL("worker_start.js", import.meta.url),
     );
 
+    const currVersion = shieldData.version ?? 0;
+
     await new Promise<void>((res) => {
       shieldWorker.onmessage = (msg) => {
         if (msg.data === "done") res();
@@ -282,18 +291,16 @@ export class PIVXShield {
       shieldData.lastProcessedBlock,
       shieldData.commitmentTree,
     );
-    pivxShield.mapNullifierNote = new Map(
-      Object.entries(shieldData.mapNullifierNote ?? {}),
-    );
+
+    if (currVersion >= 1) {
+      pivxShield.mapNullifierNote = new Map(
+        Object.entries(shieldData.mapNullifierNote),
+      );
+    }
     pivxShield.diversifierIndex = shieldData.diversifierIndex;
     pivxShield.unspentNotes = shieldData.unspentNotes;
 
-    // Shield activity update: mapNullifierNote must be present in the shieldData
-    let success = true;
-    if (!shieldData.mapNullifierNote) {
-      success = false;
-    }
-    return { pivxShield, success };
+    return { pivxShield, success: currVersion == PIVXShield.version };
   }
 
   /**
