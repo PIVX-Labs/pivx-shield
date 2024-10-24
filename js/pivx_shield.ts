@@ -20,6 +20,7 @@ interface Block {
 
 interface TransactionResult {
   decrypted_notes: [Note, string][];
+  decrypted_new_notes: [Note, string][];
   commitment_tree: string;
   nullifiers: string[];
 }
@@ -316,15 +317,14 @@ export class PIVXShield {
       );
     }
     for (const tx of block.txs) {
-      const { belongToWallet, decryptedNotes } = await this.decryptTransaction(
+      const { belongToWallet, decryptedNewNotes } = await this.addTransaction(
         tx.hex,
       );
-      await this.addTransaction(tx.hex);
       if (belongToWallet) {
         walletTransactions.push(tx.hex);
       }
       // Add all the decryptedNotes to the Nullifier->Note map
-      for (const note of decryptedNotes) {
+      for (const note of decryptedNewNotes) {
         const nullifier = await this.generateNullifierFromNote(note);
         const simplifiedNote = {
           value: note[0].value,
@@ -361,7 +361,7 @@ export class PIVXShield {
     );
   }
   async decryptTransactionOutputs(hex: string) {
-    const { decryptedNotes } = await this.decryptTransaction(hex);
+    const decryptedNotes = await this.decryptTransaction(hex);
     const simplifiedNotes = [];
     for (const [note, _] of decryptedNotes) {
       simplifiedNotes.push({
@@ -381,11 +381,20 @@ export class PIVXShield {
       this.unspentNotes,
     );
     this.commitmentTree = res.commitment_tree;
-    this.unspentNotes = res.decrypted_notes;
+    this.unspentNotes = res.decrypted_notes.concat(res.decrypted_new_notes);
 
     if (res.nullifiers.length > 0) {
       await this.removeSpentNotes(res.nullifiers);
     }
+    // Check if the transaction belongs to the wallet:
+    let belongToWallet = res.decrypted_new_notes.length > 0;
+    for (const nullifier of res.nullifiers) {
+      if (belongToWallet) {
+        break;
+      }
+      belongToWallet = belongToWallet || this.mapNullifierNote.has(nullifier);
+    }
+    return { belongToWallet, decryptedNewNotes: res.decrypted_new_notes };
   }
 
   async decryptTransaction(hex: string) {
@@ -397,15 +406,7 @@ export class PIVXShield {
       this.isTestnet,
       [],
     );
-    // Check if the transaction belongs to the wallet:
-    let belongToWallet = res.decrypted_notes.length > 0;
-    for (const nullifier of res.nullifiers) {
-      if (belongToWallet) {
-        break;
-      }
-      belongToWallet = belongToWallet || this.mapNullifierNote.has(nullifier);
-    }
-    return { belongToWallet, decryptedNotes: res.decrypted_notes };
+    return res.decrypted_new_notes;
   }
 
   /**
@@ -474,7 +475,7 @@ export class PIVXShield {
     if (useShieldInputs) {
       this.pendingSpentNotes.set(txid, nullifiers);
     }
-    const { decryptedNotes } = await this.decryptTransaction(txhex);
+    const decryptedNotes = await this.decryptTransaction(txhex);
     this.pendingUnspentNotes.set(
       txid,
       decryptedNotes.map((n) => n[0]),
