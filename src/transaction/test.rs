@@ -29,8 +29,7 @@ fn check_tx_decryption() {
     let key = UnifiedFullViewingKey::new(Some(skey.to_diversifiable_full_viewing_key()), None)
         .expect("Failed to create key");
     let mut comp_note = vec![];
-    let nullifiers =
-        handle_transaction_internal(&mut tree, tx, &key, true, &mut comp_note).unwrap();
+    let nullifiers = handle_transaction_internal(&mut tree, tx, key, true, &mut comp_note).unwrap();
     //This was a t-s tx
     assert_eq!(nullifiers.len(), 0);
     //Successfully decrypt exactly 1 note
@@ -86,7 +85,7 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
 
     let mut notes = vec![];
     let _nullifiers =
-        handle_transaction_internal(&mut commitment_tree, input_tx, &key, true, &mut notes)?;
+        handle_transaction_internal(&mut commitment_tree, input_tx, key, true, &mut notes)?;
     assert_eq!(notes.len(), 1);
     let (note, path) = &notes[0];
     let mut path_vec = vec![];
