@@ -156,16 +156,16 @@ pub fn handle_transaction(
             (note, IncrementalWitness::read(wit).unwrap())
         })
         .collect::<Vec<_>>();
-    let nullifiers = handle_transaction_internal(&mut tree, tx, &key, true, &mut comp_note)
+    let nullifiers = handle_transaction_internal(&mut tree, tx, key, true, &mut comp_note)
         .map_err(|_| "Cannot decode tx")?;
     let mut ser_comp_note: Vec<(Note, String)> = vec![];
     let mut ser_nullifiers: Vec<String> = vec![];
-    for (note, witness) in comp_note.iter() {
+    for (note, witness) in comp_note {
         let mut buff = Vec::new();
         witness
             .write(&mut buff)
             .map_err(|_| "Cannot write witness to buffer")?;
-        ser_comp_note.push((note.clone(), hex::encode(&buff)));
+        ser_comp_note.push((note, hex::encode(&buff)));
     }
 
     for nullif in nullifiers.iter() {
@@ -188,7 +188,7 @@ pub fn handle_transaction(
 pub fn handle_transaction_internal(
     tree: &mut CommitmentTree<Node>,
     tx: &str,
-    key: &UnifiedFullViewingKey,
+    key: UnifiedFullViewingKey,
     is_testnet: bool,
     witnesses: &mut Vec<(Note, IncrementalWitness<Node>)>,
 ) -> Result<Vec<Nullifier>, Box<dyn Error>> {
@@ -197,8 +197,8 @@ pub fn handle_transaction_internal(
         pivx_primitives::consensus::BranchId::Sapling,
     )?;
     let mut hash = HashMap::new();
-    hash.insert(AccountId::default(), key.clone());
-    let decrypted_tx = if is_testnet {
+    hash.insert(AccountId::default(), key);
+    let mut decrypted_tx = if is_testnet {
         decrypt_transaction(&TEST_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
     } else {
         decrypt_transaction(&MAIN_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
@@ -218,11 +218,12 @@ pub fn handle_transaction_internal(
                     .append(Node::from_cmu(out.cmu()))
                     .map_err(|_| "Failed to add cmu to witness")?;
             }
-            for note in &decrypted_tx {
+            for (index, note) in decrypted_tx.iter().enumerate() {
                 if note.index == i {
                     // Save witness
                     let witness = IncrementalWitness::from_tree(tree);
-                    witnesses.push((note.note.clone(), witness));
+                    witnesses.push((decrypted_tx.swap_remove(index).note, witness));
+                    break;
                 }
             }
         }
