@@ -156,7 +156,7 @@ pub fn handle_transaction(
             (note, IncrementalWitness::read(wit).unwrap())
         })
         .collect::<Vec<_>>();
-    let nullifiers = handle_transaction_internal(&mut tree, tx, &key, true, &mut comp_note)
+    let nullifiers = handle_transaction_internal(&mut tree, tx, key, true, &mut comp_note)
         .map_err(|_| "Cannot decode tx")?;
     let mut ser_comp_note: Vec<(Note, String)> = vec![];
     let mut ser_nullifiers: Vec<String> = vec![];
@@ -188,7 +188,7 @@ pub fn handle_transaction(
 pub fn handle_transaction_internal(
     tree: &mut CommitmentTree<Node>,
     tx: &str,
-    key: &UnifiedFullViewingKey,
+    key: UnifiedFullViewingKey,
     is_testnet: bool,
     witnesses: &mut Vec<(Note, IncrementalWitness<Node>)>,
 ) -> Result<Vec<Nullifier>, Box<dyn Error>> {
@@ -197,7 +197,7 @@ pub fn handle_transaction_internal(
         pivx_primitives::consensus::BranchId::Sapling,
     )?;
     let mut hash = HashMap::new();
-    hash.insert(AccountId::default(), key.clone());
+    hash.insert(AccountId::default(), key);
     let mut decrypted_tx = if is_testnet {
         decrypt_transaction(&TEST_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
     } else {
