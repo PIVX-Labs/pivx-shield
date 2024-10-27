@@ -17,8 +17,6 @@ multicore = ["pivx_proofs/multicore", "wasm-bindgen-rayon"]
 [dependencies]
 tokio = { version = "1.40.0", default-features = false, features = ["sync", "macros"] }
 rayon = "1.10.0"
-lazy_static = "1.5.0"
-async_once = "0.2.6"
 sha256 = { version = "1.5.0", default-features = false }
 getrandom = { version = "0.2.15", features = ["js"] }
 reqwest = { version = "0.12.0", features = ["blocking"] }

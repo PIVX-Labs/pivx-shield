@@ -78,12 +78,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async_once"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ce4f10ea3abcd6617873bae9f91d1c5332b4a778bd9ce34d0cd517474c1de82"
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1382,14 +1376,12 @@ checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 name = "pivx-shield-rust"
 version = "1.1.6"
 dependencies = [
- "async_once",
  "atomic_float",
  "console_error_panic_hook",
  "either",
  "getrandom",
  "hex",
  "jubjub",
- "lazy_static",
  "pivx_client_backend",
  "pivx_primitives",
  "pivx_proofs",

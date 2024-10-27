@@ -542,8 +542,12 @@ export class PIVXShield {
    * But will be done lazily if note called explicitally.
    * @returns resolves when the sapling prover is loaded
    */
-  async loadSaplingProver() {
-    return await this.callWorker<void>("load_prover");
+  async loadSaplingProver(url?: string) {
+    if (url) {
+      return await this.callWorker<boolean>("load_prover_with_url", url);
+    } else {
+      return await this.callWorker<boolean>("load_prover");
+    }
   }
 
   /**

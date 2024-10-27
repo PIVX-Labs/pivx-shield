@@ -1,5 +1,6 @@
 pub use crate::keys::decode_extended_full_viewing_key;
 pub use crate::keys::decode_extsk;
+use crate::prover::get_prover;
 pub use pivx_client_backend::decrypt_transaction;
 pub use pivx_client_backend::keys::UnifiedFullViewingKey;
 use pivx_primitives::consensus::Network;
@@ -13,11 +14,9 @@ pub use pivx_primitives::transaction::builder::Progress;
 
 use crate::keys::decode_generic_address;
 use crate::keys::GenericAddress;
-use async_once::AsyncOnce;
 #[cfg(feature = "multicore")]
 use atomic_float::AtomicF32;
 pub use either::Either;
-use lazy_static::lazy_static;
 pub use pivx_primitives::sapling::{note::Note, Node, Nullifier};
 pub use pivx_primitives::transaction::builder::Builder;
 pub use pivx_primitives::transaction::components::Amount;
@@ -30,7 +29,7 @@ pub use pivx_primitives::zip32::ExtendedSpendingKey;
 pub use pivx_primitives::zip32::Scope;
 pub use pivx_proofs::prover::LocalTxProver;
 use rand_core::OsRng;
-pub use reqwest::Client;
+
 use secp256k1::SecretKey;
 pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -43,13 +42,6 @@ use tokio::{join, sync::mpsc::Receiver, sync::mpsc::Sender};
 pub use wasm_bindgen::prelude::*;
 mod test;
 
-lazy_static! {
-    static ref PROVER: AsyncOnce<LocalTxProver> = AsyncOnce::new(async {
-        let (sapling_spend_bytes, sapling_output_bytes): (Vec<u8>, Vec<u8>) =
-            fetch_params().await.expect("Cannot fetch params");
-        LocalTxProver::from_bytes(&sapling_spend_bytes, &sapling_output_bytes)
-    });
-}
 #[cfg(feature = "multicore")]
 static TX_PROGRESS_LOCK: AtomicF32 = AtomicF32::new(0.0);
 
@@ -72,35 +64,7 @@ fn fee_calculator(
             + transparent_output_count * transparent_output_size
             + tx_offset_size)
 }
-async fn fetch_params() -> Result<(Vec<u8>, Vec<u8>), Box<dyn Error>> {
-    let c = Client::new();
-    let sapling_output_bytes = c
-        .get("https://duddino.com/sapling-output.params")
-        .send()
-        .await?
-        .bytes()
-        .await?;
-    let sapling_spend_bytes = c
-        .get("https://duddino.com/sapling-spend.params")
-        .send()
-        .await?
-        .bytes()
-        .await?;
 
-    if sha256::digest(&*sapling_output_bytes)
-        != "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4"
-    {
-        Err("Sha256 does not match for sapling output")?;
-    }
-
-    if sha256::digest(&*sapling_spend_bytes)
-        != "8e48ffd23abb3a5fd9c5589204f32d9c31285a04b78096ba40a79b75677efc13"
-    {
-        Err("Sha256 does not match for sapling spend")?;
-    }
-
-    Ok((sapling_spend_bytes.to_vec(), sapling_output_bytes.to_vec()))
-}
 #[wasm_bindgen]
 #[cfg(feature = "multicore")]
 pub fn read_tx_progress() -> f32 {
@@ -116,11 +80,6 @@ pub fn read_tx_progress() -> f32 {
 #[cfg(feature = "multicore")]
 pub fn set_tx_status(val: f32) {
     TX_PROGRESS_LOCK.store(val, Ordering::Relaxed);
-}
-#[wasm_bindgen]
-pub async fn load_prover() -> bool {
-    PROVER.get().await;
-    true
 }
 
 #[derive(Serialize, Deserialize)]
@@ -158,15 +117,9 @@ pub fn handle_transaction(
         })
         .collect::<Vec<_>>();
     let mut new_comp_note: Vec<(Note, IncrementalWitness<Node>)> = vec![];
-    let nullifiers = handle_transaction_internal(
-        &mut tree,
-        tx,
-        key,
-        true,
-        &mut comp_note,
-        &mut new_comp_note,
-    )
-    .map_err(|_| "Cannot decode tx")?;
+    let nullifiers =
+        handle_transaction_internal(&mut tree, tx, key, true, &mut comp_note, &mut new_comp_note)
+            .map_err(|_| "Cannot decode tx")?;
     let ser_comp_note: Vec<(Note, String)> =
         serialize_comp_note(comp_note).map_err(|_| "Cannot serialize notes")?;
     let ser_new_comp_note: Vec<(Note, String)> =
@@ -449,7 +402,7 @@ pub async fn create_transaction_internal(
         }
     }
 
-    let prover = PROVER.get().await;
+    let prover = get_prover().await;
     #[cfg(feature = "multicore")]
     {
         let (transmitter, mut receiver): (Sender<Progress>, Receiver<Progress>) =
