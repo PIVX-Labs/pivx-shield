@@ -304,26 +304,58 @@ export class PIVXShield {
     return { pivxShield, success: currVersion == PIVXShield.version };
   }
 
-    async handleBlocks(blocks: Block[]) {
-	const walletTransactions: string[] = [];
-	const { decrypted_notes, nullifiers, commitment_tree } = await this.callWorker<TransactionResult>("handle_blocks", this.commitmentTree, blocks, this.extfvk, this.isTestnet, this.unspentNotes);
-	this.commitmentTree = commitment_tree;
-	this.unspentNotes = decrypted_notes;
-	for (const note of decrypted_notes) {
-	    const nullifier = await this.generateNullifierFromNote(note);
-            const simplifiedNote = {
-		value: note[0].value,
-		recipient: await this.getShieldAddressFromNote(note[0]),
-            };
-
-            this.mapNullifierNote.set(nullifier, simplifiedNote);
-	}
-	await this.removeSpentNotes(nullifiers);
-	this.lastProcessedBlock = blocks[blocks.length - 1]?.height ?? this.lastProcessedBlock;
-	// Delete the corresponding pending transaction
-	// this.pendingUnspentNotes.delete(tx.txid);
-	return walletTransactions;
+  async handleBlocks(blocks: Block[]) {
+    if (blocks.length === 0) return [];
+    const walletTransactions: string[] = [];
+    if (
+      !blocks.every((block, i) => {
+        if (i === 0) {
+          return block.height > this.lastProcessedBlock;
+        } else {
+          return block.height > blocks[i - 1].height;
+        }
+      })
+    ) {
+      throw new Error(
+        "Blocks must be provided in monotonically increaisng order",
+      );
     }
+
+    for (const block of blocks) {
+      for (const tx of block.txs) {
+        this.pendingUnspentNotes.delete(tx.txid);
+      }
+    }
+
+    const {
+      decrypted_notes,
+      decrypted_new_notes,
+      nullifiers,
+      commitment_tree,
+    } = await this.callWorker<TransactionResult>(
+      "handle_blocks",
+      this.commitmentTree,
+      blocks,
+      this.extfvk,
+      this.isTestnet,
+      this.unspentNotes,
+    );
+    this.commitmentTree = commitment_tree;
+    this.unspentNotes = decrypted_notes;
+    for (const note of decrypted_new_notes) {
+      const nullifier = await this.generateNullifierFromNote(note);
+      const simplifiedNote = {
+        value: note[0].value,
+        recipient: await this.getShieldAddressFromNote(note[0]),
+      };
+
+      this.mapNullifierNote.set(nullifier, simplifiedNote);
+    }
+    await this.removeSpentNotes(nullifiers);
+    this.lastProcessedBlock = blocks[blocks.length - 1].height;
+
+    return walletTransactions;
+  }
 
   /**
    * Loop through the txs of a block and update useful shield data
@@ -331,33 +363,7 @@ export class PIVXShield {
    * @returns list of transactions belonging to the wallet
    */
   async handleBlock(block: Block) {
-    let walletTransactions: string[] = [];
-    if (this.lastProcessedBlock > block.height) {
-      throw new Error(
-        "Blocks must be processed in a monotonically increasing order!",
-      );
-    }
-    for (const tx of block.txs) {
-      const { belongToWallet, decryptedNewNotes } = await this.addTransaction(
-        tx.hex,
-      );
-      if (belongToWallet) {
-        walletTransactions.push(tx.hex);
-      }
-      // Add all the decryptedNotes to the Nullifier->Note map
-      for (const note of decryptedNewNotes) {
-        const nullifier = await this.generateNullifierFromNote(note);
-        const simplifiedNote = {
-          value: note[0].value,
-          recipient: await this.getShieldAddressFromNote(note[0]),
-        };
-        this.mapNullifierNote.set(nullifier, simplifiedNote);
-      }
-      // Delete the corresponding pending transaction
-      this.pendingUnspentNotes.delete(tx.txid);
-    }
-    this.lastProcessedBlock = block.height;
-    return walletTransactions;
+    return await this.handleBlocks([block]);
   }
 
   /**

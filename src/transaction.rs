@@ -9,7 +9,6 @@ pub use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
 use pivx_primitives::legacy::Script;
 pub use pivx_primitives::memo::MemoBytes;
 pub use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
-pub use pivx_primitives::sapling::PaymentAddress;
 pub use pivx_primitives::transaction::builder::Progress;
 
 use crate::keys::decode_generic_address;
@@ -124,23 +123,25 @@ pub fn handle_blocks(
         })
         .collect::<Vec<_>>();
     let mut nullifiers = vec![];
+    let mut new_notes = vec![];
     for block in blocks {
         for tx in block.txs {
             nullifiers.extend(
-                handle_transaction_internal(&mut tree, &tx, &key, is_testnet, &mut comp_note)
-                    .map_err(|_| "Couldn't handle transaction")?,
+                handle_transaction_internal(
+                    &mut tree,
+                    &tx,
+                    key.clone(),
+                    is_testnet,
+                    &mut comp_note,
+                    &mut new_notes,
+                )
+                .map_err(|_| "Couldn't handle transaction")?,
             );
         }
     }
 
-    let mut ser_comp_note: Vec<(Note, String)> = Vec::with_capacity(comp_note.len());
-    for (note, witness) in comp_note.iter() {
-        let mut buff = Vec::new();
-        witness
-            .write(&mut buff)
-            .map_err(|_| "Cannot write witness to buffer")?;
-        ser_comp_note.push((note.clone(), hex::encode(&buff)));
-    }
+    let ser_comp_note = serialize_comp_note(comp_note).map_err(|_| "couldn't decrypt notes")?;
+    let ser_new_comp_note = serialize_comp_note(new_notes).map_err(|_| "couldn't decrypt notes")?;
 
     let mut ser_nullifiers: Vec<String> = Vec::with_capacity(nullifiers.len());
     for nullif in nullifiers.iter() {
@@ -155,56 +156,8 @@ pub fn handle_blocks(
         decrypted_notes: ser_comp_note,
         nullifiers: ser_nullifiers,
         commitment_tree: hex::encode(buff),
-    })?)
-}
-
-//Input a tx and return: the updated commitment merkletree, all the nullifier found in the tx and all the node decoded with the corresponding witness
-#[wasm_bindgen]
-pub fn handle_transaction(
-    tree_hex: &str,
-    tx: &str,
-    enc_extfvk: &str,
-    is_testnet: bool,
-    comp_notes: JsValue,
-) -> Result<JsValue, JsValue> {
-    let mut tree = read_commitment_tree(tree_hex).map_err(|_| "Couldn't read commitment tree")?;
-    let extfvk =
-        decode_extended_full_viewing_key(enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
-    let key = UnifiedFullViewingKey::new(Some(extfvk.to_diversifiable_full_viewing_key()), None)
-        .ok_or("Failed to create unified full viewing key")?;
-    let comp_note: Vec<(Note, String)> = serde_wasm_bindgen::from_value(comp_notes)?;
-    let mut comp_note = comp_note
-        .into_iter()
-        .map(|(note, witness)| {
-            let wit = Cursor::new(hex::decode(witness).unwrap());
-            (note, IncrementalWitness::read(wit).unwrap())
-        })
-        .collect::<Vec<_>>();
-    let mut new_comp_note: Vec<(Note, IncrementalWitness<Node>)> = vec![];
-    let nullifiers =
-        handle_transaction_internal(&mut tree, tx, key, true, &mut comp_note, &mut new_comp_note)
-            .map_err(|_| "Cannot decode tx")?;
-    let ser_comp_note: Vec<(Note, String)> =
-        serialize_comp_note(comp_note).map_err(|_| "Cannot serialize notes")?;
-    let ser_new_comp_note: Vec<(Note, String)> =
-        serialize_comp_note(new_comp_note).map_err(|_| "Cannot serialize notes")?;
-    let mut ser_nullifiers: Vec<String> = vec![];
-
-    for nullif in nullifiers.iter() {
-        ser_nullifiers.push(hex::encode(nullif.0));
-    }
-
-    let mut buff = Vec::new();
-    tree.write(&mut buff)
-        .map_err(|_| "Cannot write tree to buffer")?;
-
-    let res: JSTxSaplingData = JSTxSaplingData {
-        decrypted_notes: ser_comp_note,
         decrypted_new_notes: ser_new_comp_note,
-        nullifiers: ser_nullifiers,
-        commitment_tree: hex::encode(buff),
-    };
-    Ok(serde_wasm_bindgen::to_value(&res).map_err(|_| "Cannot serialize tx output")?)
+    })?)
 }
 
 pub fn serialize_comp_note(
