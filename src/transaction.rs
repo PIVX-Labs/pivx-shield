@@ -126,6 +126,7 @@ pub async fn load_prover() -> bool {
 #[derive(Serialize, Deserialize)]
 pub struct JSTxSaplingData {
     pub decrypted_notes: Vec<(Note, String)>,
+    pub decrypted_new_notes: Vec<(Note, String)>,
     pub nullifiers: Vec<String>,
     pub commitment_tree: String,
 }
@@ -156,17 +157,21 @@ pub fn handle_transaction(
             (note, IncrementalWitness::read(wit).unwrap())
         })
         .collect::<Vec<_>>();
-    let nullifiers = handle_transaction_internal(&mut tree, tx, key, true, &mut comp_note)
-        .map_err(|_| "Cannot decode tx")?;
-    let mut ser_comp_note: Vec<(Note, String)> = vec![];
+    let mut new_comp_note: Vec<(Note, IncrementalWitness<Node>)> = vec![];
+    let nullifiers = handle_transaction_internal(
+        &mut tree,
+        tx,
+        key,
+        true,
+        &mut comp_note,
+        &mut new_comp_note,
+    )
+    .map_err(|_| "Cannot decode tx")?;
+    let ser_comp_note: Vec<(Note, String)> =
+        serialize_comp_note(comp_note).map_err(|_| "Cannot serialize notes")?;
+    let ser_new_comp_note: Vec<(Note, String)> =
+        serialize_comp_note(new_comp_note).map_err(|_| "Cannot serialize notes")?;
     let mut ser_nullifiers: Vec<String> = vec![];
-    for (note, witness) in comp_note {
-        let mut buff = Vec::new();
-        witness
-            .write(&mut buff)
-            .map_err(|_| "Cannot write witness to buffer")?;
-        ser_comp_note.push((note, hex::encode(&buff)));
-    }
 
     for nullif in nullifiers.iter() {
         ser_nullifiers.push(hex::encode(nullif.0));
@@ -178,10 +183,25 @@ pub fn handle_transaction(
 
     let res: JSTxSaplingData = JSTxSaplingData {
         decrypted_notes: ser_comp_note,
+        decrypted_new_notes: ser_new_comp_note,
         nullifiers: ser_nullifiers,
         commitment_tree: hex::encode(buff),
     };
     Ok(serde_wasm_bindgen::to_value(&res).map_err(|_| "Cannot serialize tx output")?)
+}
+
+pub fn serialize_comp_note(
+    comp_note: Vec<(Note, IncrementalWitness<Node>)>,
+) -> Result<Vec<(Note, String)>, Box<dyn Error>> {
+    let mut ser_comp_note: Vec<(Note, String)> = vec![];
+    for (note, witness) in comp_note {
+        let mut buff = Vec::new();
+        witness
+            .write(&mut buff)
+            .map_err(|_| "Cannot write witness to buffer")?;
+        ser_comp_note.push((note, hex::encode(&buff)));
+    }
+    Ok(ser_comp_note)
 }
 
 //add a tx to a given commitment tree and the return a witness to each output
@@ -191,6 +211,7 @@ pub fn handle_transaction_internal(
     key: UnifiedFullViewingKey,
     is_testnet: bool,
     witnesses: &mut Vec<(Note, IncrementalWitness<Node>)>,
+    new_witnesses: &mut Vec<(Note, IncrementalWitness<Node>)>,
 ) -> Result<Vec<Nullifier>, Box<dyn Error>> {
     let tx = Transaction::read(
         Cursor::new(hex::decode(tx)?),
@@ -210,10 +231,9 @@ pub fn handle_transaction_internal(
         }
 
         for (i, out) in sapling.shielded_outputs().iter().enumerate() {
-            println!("note found!");
             tree.append(Node::from_cmu(out.cmu()))
                 .map_err(|_| "Failed to add cmu to tree")?;
-            for (_, witness) in witnesses.iter_mut() {
+            for (_, witness) in witnesses.iter_mut().chain(new_witnesses.iter_mut()) {
                 witness
                     .append(Node::from_cmu(out.cmu()))
                     .map_err(|_| "Failed to add cmu to witness")?;
@@ -222,7 +242,7 @@ pub fn handle_transaction_internal(
                 if note.index == i {
                     // Save witness
                     let witness = IncrementalWitness::from_tree(tree);
-                    witnesses.push((decrypted_tx.swap_remove(index).note, witness));
+                    new_witnesses.push((decrypted_tx.swap_remove(index).note, witness));
                     break;
                 }
             }
