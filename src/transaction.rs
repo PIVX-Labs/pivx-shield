@@ -91,7 +91,6 @@ pub struct JSTxSaplingData {
 
 #[derive(Serialize, Deserialize)]
 pub struct Block {
-    height: u32,
     txs: Vec<String>,
 }
 

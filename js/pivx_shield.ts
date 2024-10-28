@@ -18,6 +18,13 @@ interface Block {
   height: number;
 }
 
+/**
+ * Block that's deserialized in rust
+ */
+interface RustBlock {
+    txs: string[],
+}
+
 interface TransactionResult {
   decrypted_notes: [Note, string][];
   decrypted_new_notes: [Note, string][];
@@ -335,7 +342,11 @@ export class PIVXShield {
     } = await this.callWorker<TransactionResult>(
       "handle_blocks",
       this.commitmentTree,
-      blocks,
+	blocks.map(block=>{
+	    return {
+		txs: block.txs.map(({hex}) => hex)
+	    }
+	}) satisfies RustBlock[],
       this.extfvk,
       this.isTestnet,
       this.unspentNotes,
@@ -398,37 +409,12 @@ export class PIVXShield {
     }
     return simplifiedNotes;
   }
-  async addTransaction(hex: string) {
-    const res = await this.callWorker<TransactionResult>(
-      "handle_transaction",
-      this.commitmentTree,
-      hex,
-      this.extfvk,
-      this.isTestnet,
-      this.unspentNotes,
-    );
-    this.commitmentTree = res.commitment_tree;
-    this.unspentNotes = res.decrypted_notes.concat(res.decrypted_new_notes);
 
-    if (res.nullifiers.length > 0) {
-      await this.removeSpentNotes(res.nullifiers);
-    }
-    // Check if the transaction belongs to the wallet:
-    let belongToWallet = res.decrypted_new_notes.length > 0;
-    for (const nullifier of res.nullifiers) {
-      if (belongToWallet) {
-        break;
-      }
-      belongToWallet = belongToWallet || this.mapNullifierNote.has(nullifier);
-    }
-    return { belongToWallet, decryptedNewNotes: res.decrypted_new_notes };
-  }
-
-  async decryptTransaction(hex: string) {
+    async decryptTransaction(hex: string) {
     const res = await this.callWorker<TransactionResult>(
-      "handle_transaction",
+      "handle_blocks",
       this.commitmentTree,
-      hex,
+      [{txs: [hex]}] satisfies RustBlock[],
       this.extfvk,
       this.isTestnet,
       [],
