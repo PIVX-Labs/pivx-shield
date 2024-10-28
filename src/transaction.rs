@@ -17,6 +17,7 @@ use crate::keys::GenericAddress;
 #[cfg(feature = "multicore")]
 use atomic_float::AtomicF32;
 pub use either::Either;
+use pivx_primitives::sapling::prover::TxProver;
 pub use pivx_primitives::sapling::{note::Note, Node, Nullifier};
 pub use pivx_primitives::transaction::builder::Builder;
 pub use pivx_primitives::transaction::components::Amount;
@@ -27,7 +28,6 @@ pub use pivx_primitives::zip32::AccountId;
 use pivx_primitives::zip32::ExtendedFullViewingKey;
 pub use pivx_primitives::zip32::ExtendedSpendingKey;
 pub use pivx_primitives::zip32::Scope;
-pub use pivx_proofs::prover::LocalTxProver;
 use rand_core::OsRng;
 
 use secp256k1::SecretKey;
@@ -550,7 +550,7 @@ fn prove_transaction(
     builder: Builder<'_, Network, OsRng>,
     nullifiers: Vec<String>,
     fee: u64,
-    prover: &LocalTxProver,
+    prover: &impl TxProver,
 ) -> Result<JSTransaction, Box<dyn Error>> {
     #[cfg(not(test))]
     return {
