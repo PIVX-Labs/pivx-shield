@@ -19,7 +19,7 @@ type ImplTxProver = MockTxProver;
 static PROVER: OnceCell<ImplTxProver> = OnceCell::const_new();
 
 pub async fn get_prover() -> &'static impl TxProver {
-    let default_urls = &["https://https://pivxla.bz", "https://duddino.com"];
+    let default_urls = &["https://pivxla.bz", "https://duddino.com"];
     for url in default_urls {
         if let Ok(prover) = get_with_url(url).await {
             return prover;
