@@ -87,6 +87,7 @@ pub struct JSTxSaplingData {
     pub decrypted_new_notes: Vec<(Note, String)>,
     pub nullifiers: Vec<String>,
     pub commitment_tree: String,
+    pub wallet_transactions: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -123,19 +124,23 @@ pub fn handle_blocks(
         .collect::<Vec<_>>();
     let mut nullifiers = vec![];
     let mut new_notes = vec![];
+    let mut wallet_transactions = vec![];
     for block in blocks {
         for tx in block.txs {
-            nullifiers.extend(
-                handle_transaction(
-                    &mut tree,
-                    &tx,
-                    key.clone(),
-                    is_testnet,
-                    &mut comp_note,
-                    &mut new_notes,
-                )
-                .map_err(|_| "Couldn't handle transaction")?,
-            );
+            let old_note_length = new_notes.len();
+            let tx_nullifiers = handle_transaction(
+                &mut tree,
+                &tx,
+                key.clone(),
+                is_testnet,
+                &mut comp_note,
+                &mut new_notes,
+            )
+            .map_err(|_| "Couldn't handle transaction")?;
+            if !tx_nullifiers.is_empty() || old_note_length != new_notes.len() {
+                wallet_transactions.push(tx);
+            }
+            nullifiers.extend(tx_nullifiers);
         }
     }
 
@@ -155,6 +160,7 @@ pub fn handle_blocks(
         decrypted_notes: ser_comp_note,
         nullifiers: ser_nullifiers,
         commitment_tree: hex::encode(buff),
+        wallet_transactions,
         decrypted_new_notes: ser_new_comp_note,
     })?)
 }

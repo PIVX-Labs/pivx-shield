@@ -30,6 +30,11 @@ interface TransactionResult {
   decrypted_new_notes: [Note, string][];
   commitment_tree: string;
   nullifiers: string[];
+  /**
+   * hex of the transactions belonging to the wallet
+   * i.e. either the spend or output belongs to us
+   */
+  wallet_transactions: string[];
 }
 
 interface Transaction {
@@ -313,7 +318,6 @@ export class PIVXShield {
 
   async handleBlocks(blocks: Block[]) {
     if (blocks.length === 0) return [];
-    const walletTransactions: string[] = [];
     if (
       !blocks.every((block, i) => {
         if (i === 0) {
@@ -339,6 +343,7 @@ export class PIVXShield {
       decrypted_new_notes,
       nullifiers,
       commitment_tree,
+      wallet_transactions,
     } = await this.callWorker<TransactionResult>(
       "handle_blocks",
       this.commitmentTree,
@@ -365,7 +370,7 @@ export class PIVXShield {
     await this.removeSpentNotes(nullifiers);
     this.lastProcessedBlock = blocks[blocks.length - 1].height;
 
-    return walletTransactions;
+    return wallet_transactions;
   }
 
   /**
