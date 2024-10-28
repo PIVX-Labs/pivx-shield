@@ -1,6 +1,7 @@
 mod checkpoint;
 mod keys;
 mod mainnet_checkpoints;
+mod prover;
 mod testnet_checkpoints;
 mod transaction;
 mod utils;
