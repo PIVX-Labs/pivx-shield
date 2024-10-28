@@ -22,7 +22,7 @@ interface Block {
  * Block that's deserialized in rust
  */
 interface RustBlock {
-    txs: string[],
+  txs: string[];
 }
 
 interface TransactionResult {
@@ -342,17 +342,17 @@ export class PIVXShield {
     } = await this.callWorker<TransactionResult>(
       "handle_blocks",
       this.commitmentTree,
-	blocks.map(block=>{
-	    return {
-		txs: block.txs.map(({hex}) => hex)
-	    }
-	}) satisfies RustBlock[],
+      blocks.map((block) => {
+        return {
+          txs: block.txs.map(({ hex }) => hex),
+        };
+      }) satisfies RustBlock[],
       this.extfvk,
       this.isTestnet,
       this.unspentNotes,
     );
     this.commitmentTree = commitment_tree;
-    this.unspentNotes = decrypted_notes;
+    this.unspentNotes = [...decrypted_notes, ...decrypted_new_notes];
     for (const note of decrypted_new_notes) {
       const nullifier = await this.generateNullifierFromNote(note);
       const simplifiedNote = {
@@ -410,11 +410,11 @@ export class PIVXShield {
     return simplifiedNotes;
   }
 
-    async decryptTransaction(hex: string) {
+  async decryptTransaction(hex: string) {
     const res = await this.callWorker<TransactionResult>(
       "handle_blocks",
       this.commitmentTree,
-      [{txs: [hex]}] satisfies RustBlock[],
+      [{ txs: [hex] }] satisfies RustBlock[],
       this.extfvk,
       this.isTestnet,
       [],
