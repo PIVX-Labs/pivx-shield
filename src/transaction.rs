@@ -127,7 +127,7 @@ pub fn handle_blocks(
     for block in blocks {
         for tx in block.txs {
             nullifiers.extend(
-                handle_transaction_internal(
+                handle_transaction(
                     &mut tree,
                     &tx,
                     key.clone(),
@@ -175,7 +175,7 @@ pub fn serialize_comp_note(
 }
 
 //add a tx to a given commitment tree and the return a witness to each output
-pub fn handle_transaction_internal(
+pub fn handle_transaction(
     tree: &mut CommitmentTree<Node>,
     tx: &str,
     key: UnifiedFullViewingKey,
