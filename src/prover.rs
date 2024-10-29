@@ -1,13 +1,25 @@
+use pivx_primitives::sapling::prover::TxProver;
+
+#[cfg(test)]
+use pivx_primitives::sapling::prover::mock::MockTxProver;
+#[cfg(not(test))]
 use pivx_proofs::prover::LocalTxProver;
+
 use reqwest::Client;
 use std::error::Error;
 use tokio::sync::OnceCell;
 use wasm_bindgen::prelude::*;
 
-static PROVER: OnceCell<LocalTxProver> = OnceCell::const_new();
+#[cfg(not(test))]
+type ImplTxProver = LocalTxProver;
 
-pub async fn get_prover() -> &'static LocalTxProver {
-    let default_urls = &["https://https://pivxla.bz", "https://duddino.com"];
+#[cfg(test)]
+type ImplTxProver = MockTxProver;
+
+static PROVER: OnceCell<ImplTxProver> = OnceCell::const_new();
+
+pub async fn get_prover() -> &'static impl TxProver {
+    let default_urls = &["https://pivxla.bz", "https://duddino.com"];
     for url in default_urls {
         if let Ok(prover) = get_with_url(url).await {
             return prover;
@@ -20,7 +32,8 @@ pub async fn get_prover() -> &'static LocalTxProver {
  * gets prover using the specified url. If the prover has already been downloaded
  * no request will be made
  */
-pub async fn get_with_url(url: &str) -> Result<&'static LocalTxProver, Box<dyn Error>> {
+#[cfg(not(test))]
+pub async fn get_with_url(url: &str) -> Result<&'static impl TxProver, Box<dyn Error>> {
     PROVER
         .get_or_try_init(|| async {
             let c = Client::new();
@@ -46,6 +59,11 @@ pub async fn get_with_url(url: &str) -> Result<&'static LocalTxProver, Box<dyn E
             ))
         })
         .await
+}
+
+#[cfg(test)]
+pub async fn get_with_url(_url: &str) -> Result<&'static impl TxProver, Box<dyn Error>> {
+    Ok(PROVER.get_or_init(|| async { MockTxProver }).await)
 }
 
 #[wasm_bindgen]
