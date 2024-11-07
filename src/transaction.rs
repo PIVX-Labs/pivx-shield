@@ -271,41 +271,6 @@ pub fn handle_transaction(
 }
 
 #[wasm_bindgen]
-pub fn remove_spent_notes(
-    notes_data: JsValue,
-    nullifiers_data: JsValue,
-    enc_extfvk: String,
-    is_testnet: bool,
-) -> Result<JsValue, JsValue> {
-    let hex_notes: Vec<(Note, String)> = serde_wasm_bindgen::from_value(notes_data)?;
-    let nullifiers: Vec<String> = serde_wasm_bindgen::from_value(nullifiers_data)?;
-    let mut notes: Vec<(Note, String, MerklePath<Node>)> = vec![];
-    let mut unspent_notes: Vec<(Note, String)> = vec![];
-
-    let extfvk =
-        decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
-    let nullif_key = extfvk
-        .to_diversifiable_full_viewing_key()
-        .to_nk(Scope::External);
-
-    for (note, witness) in hex_notes.iter() {
-        let buff = Cursor::new(hex::decode(witness).map_err(|_| "Cannot decode witness")?);
-        let path = IncrementalWitness::<Node>::read(buff)
-            .map_err(|_| "Cannot read witness from buffer")?
-            .path()
-            .ok_or("Cannot find witness path")?;
-        notes.push((note.clone(), witness.clone(), path));
-    }
-    for (note, witness, path) in notes.iter() {
-        let nf = hex::encode(note.nf(&nullif_key, path.position).0);
-        if !nullifiers.iter().any(|x| **x == nf) {
-            unspent_notes.push((note.clone(), witness.clone()));
-        };
-    }
-    Ok(serde_wasm_bindgen::to_value(&unspent_notes)?)
-}
-
-#[wasm_bindgen]
 pub fn get_nullifier_from_note(
     note_data: JsValue,
     enc_extfvk: String,
