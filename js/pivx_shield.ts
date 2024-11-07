@@ -18,11 +18,23 @@ interface Block {
   height: number;
 }
 
+/**
+ * Block that's deserialized in rust
+ */
+interface RustBlock {
+  txs: string[];
+}
+
 interface TransactionResult {
   decrypted_notes: [Note, string][];
   decrypted_new_notes: [Note, string][];
   commitment_tree: string;
   nullifiers: string[];
+  /**
+   * hex of the transactions belonging to the wallet
+   * i.e. either the spend or output belongs to us
+   */
+  wallet_transactions: string[];
 }
 
 interface Transaction {
@@ -304,39 +316,70 @@ export class PIVXShield {
     return { pivxShield, success: currVersion == PIVXShield.version };
   }
 
+  async handleBlocks(blocks: Block[]) {
+    if (blocks.length === 0) return [];
+    if (
+      !blocks.every((block, i) => {
+        if (i === 0) {
+          return block.height > this.lastProcessedBlock;
+        } else {
+          return block.height > blocks[i - 1].height;
+        }
+      })
+    ) {
+      throw new Error(
+        "Blocks must be provided in monotonically increaisng order",
+      );
+    }
+
+    for (const block of blocks) {
+      for (const tx of block.txs) {
+        this.pendingUnspentNotes.delete(tx.txid);
+      }
+    }
+
+    const {
+      decrypted_notes,
+      decrypted_new_notes,
+      nullifiers,
+      commitment_tree,
+      wallet_transactions,
+    } = await this.callWorker<TransactionResult>(
+      "handle_blocks",
+      this.commitmentTree,
+      blocks.map((block) => {
+        return {
+          txs: block.txs.map(({ hex }) => hex),
+        };
+      }) satisfies RustBlock[],
+      this.extfvk,
+      this.isTestnet,
+      this.unspentNotes,
+    );
+    this.commitmentTree = commitment_tree;
+    this.unspentNotes = [...decrypted_notes, ...decrypted_new_notes];
+    for (const note of decrypted_new_notes) {
+      const nullifier = await this.generateNullifierFromNote(note);
+      const simplifiedNote = {
+        value: note[0].value,
+        recipient: await this.getShieldAddressFromNote(note[0]),
+      };
+
+      this.mapNullifierNote.set(nullifier, simplifiedNote);
+    }
+    await this.removeSpentNotes(nullifiers);
+    this.lastProcessedBlock = blocks[blocks.length - 1].height;
+
+    return wallet_transactions;
+  }
+
   /**
    * Loop through the txs of a block and update useful shield data
    * @param block - block outputted from any PIVX node
    * @returns list of transactions belonging to the wallet
    */
   async handleBlock(block: Block) {
-    let walletTransactions: string[] = [];
-    if (this.lastProcessedBlock > block.height) {
-      throw new Error(
-        "Blocks must be processed in a monotonically increasing order!",
-      );
-    }
-    for (const tx of block.txs) {
-      const { belongToWallet, decryptedNewNotes } = await this.addTransaction(
-        tx.hex,
-      );
-      if (belongToWallet) {
-        walletTransactions.push(tx.hex);
-      }
-      // Add all the decryptedNotes to the Nullifier->Note map
-      for (const note of decryptedNewNotes) {
-        const nullifier = await this.generateNullifierFromNote(note);
-        const simplifiedNote = {
-          value: note[0].value,
-          recipient: await this.getShieldAddressFromNote(note[0]),
-        };
-        this.mapNullifierNote.set(nullifier, simplifiedNote);
-      }
-      // Delete the corresponding pending transaction
-      this.pendingUnspentNotes.delete(tx.txid);
-    }
-    this.lastProcessedBlock = block.height;
-    return walletTransactions;
+    return await this.handleBlocks([block]);
   }
 
   /**
@@ -371,37 +414,12 @@ export class PIVXShield {
     }
     return simplifiedNotes;
   }
-  async addTransaction(hex: string) {
-    const res = await this.callWorker<TransactionResult>(
-      "handle_transaction",
-      this.commitmentTree,
-      hex,
-      this.extfvk,
-      this.isTestnet,
-      this.unspentNotes,
-    );
-    this.commitmentTree = res.commitment_tree;
-    this.unspentNotes = res.decrypted_notes.concat(res.decrypted_new_notes);
-
-    if (res.nullifiers.length > 0) {
-      await this.removeSpentNotes(res.nullifiers);
-    }
-    // Check if the transaction belongs to the wallet:
-    let belongToWallet = res.decrypted_new_notes.length > 0;
-    for (const nullifier of res.nullifiers) {
-      if (belongToWallet) {
-        break;
-      }
-      belongToWallet = belongToWallet || this.mapNullifierNote.has(nullifier);
-    }
-    return { belongToWallet, decryptedNewNotes: res.decrypted_new_notes };
-  }
 
   async decryptTransaction(hex: string) {
     const res = await this.callWorker<TransactionResult>(
-      "handle_transaction",
+      "handle_blocks",
       this.commitmentTree,
-      hex,
+      [{ txs: [hex] }] satisfies RustBlock[],
       this.extfvk,
       this.isTestnet,
       [],
