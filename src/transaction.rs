@@ -29,6 +29,7 @@ pub use pivx_primitives::zip32::ExtendedSpendingKey;
 pub use pivx_primitives::zip32::Scope;
 use rand_core::OsRng;
 
+use pivx_primitives::sapling::NullifierDerivingKey;
 use secp256k1::SecretKey;
 pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -83,8 +84,8 @@ pub fn set_tx_status(val: f32) {
 
 #[derive(Serialize, Deserialize)]
 pub struct JSTxSaplingData {
-    pub decrypted_notes: Vec<(Note, String)>,
-    pub decrypted_new_notes: Vec<(Note, String)>,
+    pub decrypted_notes: Vec<JSSpendableNote>,
+    pub decrypted_new_notes: Vec<JSSpendableNote>,
     pub nullifiers: Vec<String>,
     pub commitment_tree: String,
     pub wallet_transactions: Vec<String>,
@@ -93,6 +94,38 @@ pub struct JSTxSaplingData {
 #[derive(Serialize, Deserialize)]
 pub struct Block {
     txs: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct JSSpendableNote {
+    note: Note,
+    witness: String,
+    nullifier: String,
+}
+
+pub struct SpendableNote {
+    note: Note,
+    witness: IncrementalWitness<Node>,
+    nullifier: String,
+}
+impl SpendableNote {
+    fn from_js_spendable_note(n: JSSpendableNote) -> Result<SpendableNote, Box<dyn Error>> {
+        let wit = Cursor::new(hex::decode(n.witness)?);
+        Ok(SpendableNote {
+            note: n.note,
+            witness: IncrementalWitness::read(wit)?,
+            nullifier: n.nullifier,
+        })
+    }
+    fn to_js_spendable_note(self) -> Result<JSSpendableNote, Box<dyn Error>> {
+        let mut buff = Vec::new();
+        self.witness.write(&mut buff)?;
+        Ok(JSSpendableNote {
+            note: self.note,
+            witness: hex::encode(&buff),
+            nullifier: self.nullifier,
+        })
+    }
 }
 
 fn read_commitment_tree(tree_hex: &str) -> Result<CommitmentTree<Node>, Box<dyn Error>> {
@@ -110,18 +143,16 @@ pub fn handle_blocks(
 ) -> Result<JsValue, JsValue> {
     let blocks: Vec<Block> = serde_wasm_bindgen::from_value(blocks)?;
     let mut tree = read_commitment_tree(tree_hex).map_err(|_| "Couldn't read commitment tree")?;
-    let comp_note: Vec<(Note, String)> = serde_wasm_bindgen::from_value(comp_notes)?;
+    let comp_note: Vec<JSSpendableNote> = serde_wasm_bindgen::from_value(comp_notes)?;
     let extfvk =
         decode_extended_full_viewing_key(enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
     let key = UnifiedFullViewingKey::new(Some(extfvk.to_diversifiable_full_viewing_key()), None)
         .ok_or("Failed to create unified full viewing key")?;
     let mut comp_note = comp_note
         .into_iter()
-        .map(|(note, witness)| {
-            let wit = Cursor::new(hex::decode(witness).unwrap());
-            (note, IncrementalWitness::read(wit).unwrap())
-        })
-        .collect::<Vec<_>>();
+        .map(|n| SpendableNote::from_js_spendable_note(n))
+        .collect::<Result<Vec<SpendableNote>, _>>()
+        .map_err(|e| e.to_string())?;
     let mut nullifiers = vec![];
     let mut new_notes = vec![];
     let mut wallet_transactions = vec![];
@@ -136,8 +167,18 @@ pub fn handle_blocks(
                 &mut comp_note,
                 &mut new_notes,
             )
-            .map_err(|_| "Couldn't handle transaction")?;
-            if !tx_nullifiers.is_empty() || old_note_length != new_notes.len() {
+            .map_err(|_| "Couldn't handle transaction")?
+            .into_iter()
+            .map(|n| hex::encode(n.0))
+            .collect::<Vec<_>>();
+            let mut is_wallet_tx = old_note_length != new_notes.len();
+            for n in comp_note.iter().chain(new_notes.iter()) {
+                if is_wallet_tx || tx_nullifiers.contains(&n.nullifier) {
+                    is_wallet_tx = true;
+                    break;
+                }
+            }
+            if is_wallet_tx {
                 wallet_transactions.push(tx);
             }
             nullifiers.extend(tx_nullifiers);
@@ -147,18 +188,13 @@ pub fn handle_blocks(
     let ser_comp_note = serialize_comp_note(comp_note).map_err(|_| "couldn't decrypt notes")?;
     let ser_new_comp_note = serialize_comp_note(new_notes).map_err(|_| "couldn't decrypt notes")?;
 
-    let mut ser_nullifiers: Vec<String> = Vec::with_capacity(nullifiers.len());
-    for nullif in nullifiers.iter() {
-        ser_nullifiers.push(hex::encode(nullif.0));
-    }
-
     let mut buff = Vec::new();
     tree.write(&mut buff)
         .map_err(|_| "Cannot write tree to buffer")?;
 
     Ok(serde_wasm_bindgen::to_value(&JSTxSaplingData {
         decrypted_notes: ser_comp_note,
-        nullifiers: ser_nullifiers,
+        nullifiers,
         commitment_tree: hex::encode(buff),
         wallet_transactions,
         decrypted_new_notes: ser_new_comp_note,
@@ -166,17 +202,12 @@ pub fn handle_blocks(
 }
 
 pub fn serialize_comp_note(
-    comp_note: Vec<(Note, IncrementalWitness<Node>)>,
-) -> Result<Vec<(Note, String)>, Box<dyn Error>> {
-    let mut ser_comp_note: Vec<(Note, String)> = vec![];
-    for (note, witness) in comp_note {
-        let mut buff = Vec::new();
-        witness
-            .write(&mut buff)
-            .map_err(|_| "Cannot write witness to buffer")?;
-        ser_comp_note.push((note, hex::encode(&buff)));
-    }
-    Ok(ser_comp_note)
+    comp_note: Vec<SpendableNote>,
+) -> Result<Vec<JSSpendableNote>, Box<dyn Error>> {
+    comp_note
+        .into_iter()
+        .map(|n| SpendableNote::to_js_spendable_note(n))
+        .collect()
 }
 
 //add a tx to a given commitment tree and the return a witness to each output
@@ -185,14 +216,18 @@ pub fn handle_transaction(
     tx: &str,
     key: UnifiedFullViewingKey,
     is_testnet: bool,
-    witnesses: &mut Vec<(Note, IncrementalWitness<Node>)>,
-    new_witnesses: &mut Vec<(Note, IncrementalWitness<Node>)>,
+    witnesses: &mut Vec<SpendableNote>,
+    new_witnesses: &mut Vec<SpendableNote>,
 ) -> Result<Vec<Nullifier>, Box<dyn Error>> {
     let tx = Transaction::read(
         Cursor::new(hex::decode(tx)?),
         pivx_primitives::consensus::BranchId::Sapling,
     )?;
     let mut hash = HashMap::new();
+    let nullif_key = key
+        .sapling()
+        .ok_or("Cannot generate nullifier key")?
+        .to_nk(Scope::External);
     hash.insert(AccountId::default(), key);
     let mut decrypted_tx = if is_testnet {
         decrypt_transaction(&TEST_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
@@ -208,7 +243,10 @@ pub fn handle_transaction(
         for (i, out) in sapling.shielded_outputs().iter().enumerate() {
             tree.append(Node::from_cmu(out.cmu()))
                 .map_err(|_| "Failed to add cmu to tree")?;
-            for (_, witness) in witnesses.iter_mut().chain(new_witnesses.iter_mut()) {
+            for &mut SpendableNote {
+                ref mut witness, ..
+            } in witnesses.iter_mut().chain(new_witnesses.iter_mut())
+            {
                 witness
                     .append(Node::from_cmu(out.cmu()))
                     .map_err(|_| "Failed to add cmu to witness")?;
@@ -217,7 +255,13 @@ pub fn handle_transaction(
                 if note.index == i {
                     // Save witness
                     let witness = IncrementalWitness::from_tree(tree);
-                    new_witnesses.push((decrypted_tx.swap_remove(index).note, witness));
+                    let note = decrypted_tx.swap_remove(index).note;
+                    let nullifier = get_nullifier_from_note_internal(&nullif_key, &note, &witness)?;
+                    new_witnesses.push(SpendableNote {
+                        note,
+                        witness,
+                        nullifier,
+                    });
                     break;
                 }
             }
@@ -270,24 +314,23 @@ pub fn get_nullifier_from_note(
     let extfvk =
         decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
     let (note, hex_witness): (Note, String) = serde_wasm_bindgen::from_value(note_data)?;
-    let ser_nullifiers =
-        get_nullifier_from_note_internal(extfvk, note, hex_witness).map_err(|e| e.to_string())?;
+    let witness = Cursor::new(hex::decode(hex_witness).map_err(|e| e.to_string())?);
+    let witness =
+        IncrementalWitness::<Node>::read(witness).map_err(|_| "Cannot read witness from buffer")?;
+    let nullif_key = extfvk
+        .to_diversifiable_full_viewing_key()
+        .to_nk(Scope::External);
+    let ser_nullifiers = get_nullifier_from_note_internal(&nullif_key, &note, &witness)
+        .map_err(|e| e.to_string())?;
     Ok(serde_wasm_bindgen::to_value(&ser_nullifiers)?)
 }
 
 pub fn get_nullifier_from_note_internal(
-    extfvk: ExtendedFullViewingKey,
-    note: Note,
-    hex_witness: String,
+    nullif_key: &NullifierDerivingKey,
+    note: &Note,
+    witness: &IncrementalWitness<Node>,
 ) -> Result<String, Box<dyn Error>> {
-    let nullif_key = extfvk
-        .to_diversifiable_full_viewing_key()
-        .to_nk(Scope::External);
-    let witness = Cursor::new(hex::decode(hex_witness).map_err(|e| e.to_string())?);
-    let path = IncrementalWitness::<Node>::read(witness)
-        .map_err(|_| "Cannot read witness from buffer")?
-        .path()
-        .ok_or("Cannot find witness path")?;
+    let path = witness.path().ok_or("Cannot find witness path")?;
     Ok(hex::encode(note.nf(&nullif_key, path.position).0))
 }
 
@@ -309,7 +352,7 @@ pub struct Utxo {
 
 #[derive(Serialize, Deserialize)]
 pub struct JSTxOptions {
-    notes: Option<Vec<(Note, String)>>,
+    notes: Option<Vec<JSSpendableNote>>,
     utxos: Option<Vec<Utxo>>,
     extsk: String,
     to_address: String,
@@ -342,6 +385,8 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
         Network::MainNetwork
     };
     let input = if let Some(mut notes) = notes {
+        let mut notes: Vec<(Note, String)> =
+            notes.into_iter().map(|n| (n.note, n.witness)).collect();
         notes.sort_by_key(|(note, _)| note.value().inner());
         Either::Left(notes)
     } else if let Some(mut utxos) = utxos {

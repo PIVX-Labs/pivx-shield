@@ -26,8 +26,8 @@ interface RustBlock {
 }
 
 interface TransactionResult {
-  decrypted_notes: [Note, string][];
-  decrypted_new_notes: [Note, string][];
+  decrypted_notes: SpendableNote[];
+  decrypted_new_notes: SpendableNote[];
   commitment_tree: string;
   nullifiers: string[];
   /**
@@ -92,10 +92,10 @@ export class PIVXShield {
   private commitmentTree: string;
 
   /**
-   * Array of notes, corresponding witness
+   * Array of spendable notes
    * @private
    */
-  private unspentNotes: [Note, string][] = [];
+  private unspentNotes: SpendableNote[] = [];
 
   /**
    * A map txid->nullifiers, storing pending transaction.
@@ -309,9 +309,9 @@ export class PIVXShield {
       pivxShield.mapNullifierNote = new Map(
         Object.entries(shieldData.mapNullifierNote),
       );
+      pivxShield.unspentNotes = shieldData.unspentNotes;
     }
     pivxShield.diversifierIndex = shieldData.diversifierIndex;
-    pivxShield.unspentNotes = shieldData.unspentNotes;
 
     return { pivxShield, success: currVersion == PIVXShield.version };
   }
@@ -358,11 +358,10 @@ export class PIVXShield {
     );
     this.commitmentTree = commitment_tree;
     this.unspentNotes = [...decrypted_notes, ...decrypted_new_notes];
-    for (const note of decrypted_new_notes) {
-      const nullifier = await this.generateNullifierFromNote(note);
+    for (const { note, nullifier } of decrypted_new_notes) {
       const simplifiedNote = {
-        value: note[0].value,
-        recipient: await this.getShieldAddressFromNote(note[0]),
+        value: note.value,
+        recipient: await this.getShieldAddressFromNote(note),
       };
 
       this.mapNullifierNote.set(nullifier, simplifiedNote);
@@ -406,7 +405,7 @@ export class PIVXShield {
   async decryptTransactionOutputs(hex: string) {
     const decryptedNotes = await this.decryptTransaction(hex);
     const simplifiedNotes = [];
-    for (const [note, _] of decryptedNotes) {
+    for (const { note } of decryptedNotes) {
       simplifiedNotes.push({
         value: note.value,
         recipient: await this.getShieldAddressFromNote(note),
@@ -432,19 +431,21 @@ export class PIVXShield {
    * @param nullifiers - Array of nullifiers
    */
   private async removeSpentNotes(nullifiers: string[]) {
-    this.unspentNotes = await this.callWorker(
-      "remove_spent_notes",
-      this.unspentNotes,
-      nullifiers,
-      this.extfvk,
-      this.isTestnet,
-    );
+    for (let nullifier of nullifiers) {
+      let i = this.unspentNotes.findIndex(
+        (uNote) => uNote.nullifier === nullifier,
+      );
+      if (i !== -1) {
+        this.unspentNotes.splice(i, 1);
+      }
+    }
+    return;
   }
   /**
    * @returns number of shield satoshis of the account
    */
   getBalance() {
-    return this.unspentNotes.reduce((acc, [note]) => acc + note.value, 0);
+    return this.unspentNotes.reduce((acc, { note }) => acc + note.value, 0);
   }
 
   /**
@@ -496,7 +497,7 @@ export class PIVXShield {
     const decryptedNotes = await this.decryptTransaction(txhex);
     this.pendingUnspentNotes.set(
       txid,
-      decryptedNotes.map((n) => n[0]),
+      decryptedNotes.map(({ note }) => note),
     );
     return {
       hex: txhex,
@@ -622,6 +623,12 @@ export interface Note {
   rseed: number[];
 }
 
+export interface SpendableNote {
+  note: Note;
+  witness: string;
+  nullifier: string;
+}
+
 export interface SimplifiedNote {
   recipient: string;
   value: number;
@@ -632,6 +639,6 @@ export interface ShieldData {
   lastProcessedBlock: number;
   commitmentTree: string;
   diversifierIndex: Uint8Array;
-  unspentNotes: [Note, string][];
+  unspentNotes: SpendableNote[];
   isTestnet: boolean;
 }
