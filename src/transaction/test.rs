@@ -1,6 +1,9 @@
 #![cfg(test)]
 
-use crate::transaction::{create_transaction_internal, get_nullifier_from_note_internal};
+use crate::transaction::{
+    create_transaction_internal, get_nullifier_from_note_internal, SpendableNote,
+};
+use pivx_primitives::merkle_tree::IncrementalWitness;
 
 use super::handle_transaction;
 use either::Either;
@@ -35,7 +38,7 @@ fn check_tx_decryption() {
     assert_eq!(nullifiers.len(), 0);
     //Successfully decrypt exactly 1 note
     assert_eq!(new_comp_note.len(), 1);
-    let note = &new_comp_note[0].0;
+    let note = &new_comp_note[0].note;
     //Successfully decrypt the balance
     assert_eq!(note.value().inner(), 1000000000);
     //Successfully decrypt the payment address
@@ -94,12 +97,12 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
         &mut new_notes,
     )?;
     assert_eq!(new_notes.len(), 1);
-    let (note, path) = &new_notes[0];
-    let mut path_vec = vec![];
-    path.write(&mut path_vec)?;
-    let path = hex::encode(path_vec);
+    let SpendableNote { note, witness, .. } = &new_notes[0];
+    let mut witness_vec = vec![];
+    witness.write(&mut witness_vec)?;
+    let path = hex::encode(witness_vec);
     let tx = create_transaction_internal(
-        Either::Left(vec![(note.clone(), path.clone())]),
+        Either::Left(vec![(note.clone(), path)]),
         &extended_spending_key,
         output,
         address,
@@ -118,9 +121,12 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
     // Verify that get_nullifier_from_note_internal yields the same nullifier
     assert_eq!(
         get_nullifier_from_note_internal(
-            extended_spending_key.to_extended_full_viewing_key(),
-            note.clone(),
-            path
+            &extended_spending_key
+                .to_extended_full_viewing_key()
+                .to_diversifiable_full_viewing_key()
+                .to_nk(Scope::External),
+            &note,
+            &witness,
         )?,
         "5269442d8022af933774f9f22775566d92089a151ba733f6d751f5bb65a7f56d"
     );
