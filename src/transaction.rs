@@ -1,35 +1,46 @@
 pub use crate::keys::decode_extended_full_viewing_key;
 pub use crate::keys::decode_extsk;
 use crate::prover::get_prover;
+use crate::prover::ImplTxProver;
+use incrementalmerkletree::frontier::CommitmentTree;
+use incrementalmerkletree::witness::IncrementalWitness;
+use incrementalmerkletree::MerklePath;
 pub use pivx_client_backend::decrypt_transaction;
 pub use pivx_client_backend::keys::UnifiedFullViewingKey;
 use pivx_primitives::consensus::Network;
+use pivx_primitives::consensus::NetworkConstants;
 pub use pivx_primitives::consensus::Parameters;
 pub use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
 use pivx_primitives::legacy::Script;
 pub use pivx_primitives::memo::MemoBytes;
-pub use pivx_primitives::merkle_tree::{CommitmentTree, IncrementalWitness, MerklePath};
+use pivx_primitives::merkle_tree::read_commitment_tree as zcash_read_commitment_tree;
+use pivx_primitives::merkle_tree::read_incremental_witness;
+use pivx_primitives::merkle_tree::write_commitment_tree;
+use pivx_primitives::merkle_tree::write_incremental_witness;
+use pivx_primitives::transaction::builder::BuildConfig;
 pub use pivx_primitives::transaction::builder::Progress;
+use pivx_primitives::transaction::components::transparent::builder::TransparentSigningSet;
+use pivx_protocol::value::Zatoshis;
+use secp256k1::Secp256k1;
 
 use crate::keys::decode_generic_address;
 use crate::keys::GenericAddress;
 #[cfg(feature = "multicore")]
 use atomic_float::AtomicF32;
 pub use either::Either;
-use pivx_primitives::sapling::prover::TxProver;
-pub use pivx_primitives::sapling::{note::Note, Node, Nullifier};
 pub use pivx_primitives::transaction::builder::Builder;
 pub use pivx_primitives::transaction::components::Amount;
 use pivx_primitives::transaction::components::{OutPoint, TxOut};
 pub use pivx_primitives::transaction::fees::fixed::FeeRule;
 pub use pivx_primitives::transaction::Transaction;
 pub use pivx_primitives::zip32::AccountId;
-use pivx_primitives::zip32::ExtendedFullViewingKey;
-pub use pivx_primitives::zip32::ExtendedSpendingKey;
 pub use pivx_primitives::zip32::Scope;
 use rand_core::OsRng;
+use sapling::zip32::ExtendedFullViewingKey;
+pub use sapling::zip32::ExtendedSpendingKey;
+pub use sapling::{note::Note, Node, Nullifier};
 
-use pivx_primitives::sapling::NullifierDerivingKey;
+use sapling::NullifierDerivingKey;
 use secp256k1::SecretKey;
 pub use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
@@ -44,6 +55,13 @@ mod test;
 
 #[cfg(feature = "multicore")]
 static TX_PROGRESS_LOCK: AtomicF32 = AtomicF32::new(0.0);
+
+#[cfg(feature = "multicore")]
+type DefaultProgress = Sender;
+#[cfg(not(feature = "multicore"))]
+type DefaultProgress = ();
+
+pub const DEPTH: u8 = 32;
 
 fn fee_calculator(
     transparent_input_count: u64,
@@ -105,7 +123,7 @@ pub struct JSSpendableNote {
 
 pub struct SpendableNote {
     note: Note,
-    witness: IncrementalWitness<Node>,
+    witness: IncrementalWitness<Node, DEPTH>,
     nullifier: String,
 }
 impl SpendableNote {
@@ -113,13 +131,13 @@ impl SpendableNote {
         let wit = Cursor::new(hex::decode(n.witness)?);
         Ok(SpendableNote {
             note: n.note,
-            witness: IncrementalWitness::read(wit)?,
+            witness: read_incremental_witness(wit)?,
             nullifier: n.nullifier,
         })
     }
     fn to_js_spendable_note(self) -> Result<JSSpendableNote, Box<dyn Error>> {
         let mut buff = Vec::new();
-        self.witness.write(&mut buff)?;
+	write_incremental_witness(witness, &mut buff)?;
         Ok(JSSpendableNote {
             note: self.note,
             witness: hex::encode(&buff),
@@ -128,9 +146,9 @@ impl SpendableNote {
     }
 }
 
-fn read_commitment_tree(tree_hex: &str) -> Result<CommitmentTree<Node>, Box<dyn Error>> {
+fn read_commitment_tree(tree_hex: &str) -> Result<CommitmentTree<Node, DEPTH>, Box<dyn Error>> {
     let buff = Cursor::new(hex::decode(tree_hex)?);
-    Ok(CommitmentTree::<Node>::read(buff)?)
+    Ok(zcash_read_commitment_tree(buff)?)
 }
 
 #[wasm_bindgen]
@@ -146,8 +164,8 @@ pub fn handle_blocks(
     let comp_note: Vec<JSSpendableNote> = serde_wasm_bindgen::from_value(comp_notes)?;
     let extfvk =
         decode_extended_full_viewing_key(enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
-    let key = UnifiedFullViewingKey::new(Some(extfvk.to_diversifiable_full_viewing_key()), None)
-        .ok_or("Failed to create unified full viewing key")?;
+    let key = UnifiedFullViewingKey::from_sapling_extended_full_viewing_key(extfvk)
+        .map_err(|_|"Failed to create unified full viewing key")?;
     let mut comp_note = comp_note
         .into_iter()
         .map(|n| SpendableNote::from_js_spendable_note(n))
@@ -189,8 +207,7 @@ pub fn handle_blocks(
     let ser_new_comp_note = serialize_comp_note(new_notes).map_err(|_| "couldn't decrypt notes")?;
 
     let mut buff = Vec::new();
-    tree.write(&mut buff)
-        .map_err(|_| "Cannot write tree to buffer")?;
+    write_commitment_tree(&tree, &mut buff).map_err(|_| "Cannot write tree to buffer")?;
 
     Ok(serde_wasm_bindgen::to_value(&JSTxSaplingData {
         decrypted_notes: ser_comp_note,
@@ -212,7 +229,7 @@ pub fn serialize_comp_note(
 
 //add a tx to a given commitment tree and the return a witness to each output
 pub fn handle_transaction(
-    tree: &mut CommitmentTree<Node>,
+    tree: &mut CommitmentTree<Node, DEPTH>,
     tx: &str,
     key: UnifiedFullViewingKey,
     is_testnet: bool,
@@ -251,14 +268,14 @@ pub fn handle_transaction(
                     .append(Node::from_cmu(out.cmu()))
                     .map_err(|_| "Failed to add cmu to witness")?;
             }
-            for (index, note) in decrypted_tx.iter().enumerate() {
-                if note.index == i {
+            for output in decrypted_tx.sapling_outputs() {
+		let (note, index) = (output.note(), output.index());
+                if index == i {
                     // Save witness
-                    let witness = IncrementalWitness::from_tree(tree);
-                    let note = decrypted_tx.swap_remove(index).note;
+                    let witness = IncrementalWitness::<Node, DEPTH>::from_tree(tree.clone());
                     let nullifier = get_nullifier_from_note_internal(&nullif_key, &note, &witness)?;
                     new_witnesses.push(SpendableNote {
-                        note,
+                        note: note.clone(),
                         witness,
                         nullifier,
                     });
@@ -280,8 +297,9 @@ pub fn get_nullifier_from_note(
         decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
     let (note, hex_witness): (Note, String) = serde_wasm_bindgen::from_value(note_data)?;
     let witness = Cursor::new(hex::decode(hex_witness).map_err(|e| e.to_string())?);
+
     let witness =
-        IncrementalWitness::<Node>::read(witness).map_err(|_| "Cannot read witness from buffer")?;
+        read_incremental_witness(witness).map_err(|_| "Cannot read witness from buffer")?;
     let nullif_key = extfvk
         .to_diversifiable_full_viewing_key()
         .to_nk(Scope::External);
@@ -293,10 +311,10 @@ pub fn get_nullifier_from_note(
 pub fn get_nullifier_from_note_internal(
     nullif_key: &NullifierDerivingKey,
     note: &Note,
-    witness: &IncrementalWitness<Node>,
+    witness: &IncrementalWitness<Node, DEPTH>,
 ) -> Result<String, Box<dyn Error>> {
     let path = witness.path().ok_or("Cannot find witness path")?;
-    Ok(hex::encode(note.nf(&nullif_key, path.position).0))
+    Ok(hex::encode(note.nf(&nullif_key, path.position().into()).0))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -387,7 +405,15 @@ pub async fn create_transaction_internal(
     block_height: BlockHeight,
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
-    let mut builder = Builder::new(network, block_height);
+    let mut builder = Builder::new(
+        network,
+        block_height,
+        BuildConfig::Standard {
+            sapling_anchor: None,
+            orchard_anchor: None,
+        },
+    );
+
     let (transparent_output_count, sapling_output_count) =
         if to_address.starts_with(network.hrp_sapling_payment_address()) {
             (0, 2)
@@ -411,8 +437,9 @@ pub async fn create_transaction_internal(
             sapling_output_count,
         )?,
     };
-    let amount = Amount::from_u64(amount).map_err(|_| "Invalid Amount")?;
+    let amount = Zatoshis::from_u64(amount).map_err(|_| "Invalid Amount")?;
     let to_address = decode_generic_address(network, to_address)?;
+
     match to_address {
         GenericAddress::Transparent(x) => builder
             .add_transparent_output(&x, amount)
@@ -469,21 +496,22 @@ pub async fn create_transaction_internal(
 }
 
 fn choose_utxos(
-    builder: &mut Builder<Network, OsRng>,
+    builder: &mut Builder<Network, DefaultProgress>,
     utxos: &[Utxo],
     amount: &mut u64,
     transparent_output_count: u64,
     sapling_output_count: u64,
-) -> Result<(Vec<String>, Amount, u64), Box<dyn Error>> {
+) -> Result<(Vec<String>, Zatoshis, u64), Box<dyn Error>> {
     let mut total = 0;
     let mut used_utxos = vec![];
     let mut transparent_input_count = 0;
     let mut fee = 0;
+    let secp = Secp256k1::new();
     for utxo in utxos {
         used_utxos.push(format!("{},{}", utxo.txid, utxo.vout));
         builder
             .add_transparent_input(
-                SecretKey::from_slice(&utxo.private_key)?,
+                SecretKey::from_slice(&utxo.private_key)?.public_key(&secp),
                 OutPoint::new(
                     hex::decode(&utxo.txid)?
                         .into_iter()
@@ -494,7 +522,7 @@ fn choose_utxos(
                     utxo.vout,
                 ),
                 TxOut {
-                    value: Amount::from_u64(utxo.amount).map_err(|_| "Invalid utxo amount")?,
+                    value: Zatoshis::from_u64(utxo.amount).map_err(|_| "Invalid utxo amount")?,
                     script_pubkey: Script(utxo.script.clone()),
                 },
             )
@@ -519,29 +547,29 @@ fn choose_utxos(
         }
     }
 
-    let change = Amount::from_u64(total - *amount - fee).map_err(|_| "Invalid change")?;
+    let change = Zatoshis::from_u64(total - *amount - fee).map_err(|_| "Invalid change")?;
     Ok((used_utxos, change, fee))
 }
 
 fn choose_notes(
-    builder: &mut Builder<Network, OsRng>,
+    builder: &mut Builder<Network, DefaultProgress>,
     notes: &[(Note, String)],
     extsk: &ExtendedSpendingKey,
     amount: &mut u64,
     transparent_output_count: u64,
     sapling_output_count: u64,
-) -> Result<(Vec<String>, Amount, u64), Box<dyn Error>> {
+) -> Result<(Vec<String>, Zatoshis, u64), Box<dyn Error>> {
     let mut total = 0;
     let mut nullifiers = vec![];
     let mut sapling_input_count = 0;
     let mut fee = 0;
     for (note, witness) in notes {
         let witness = Cursor::new(hex::decode(witness)?);
-        let witness = IncrementalWitness::<Node>::read(witness)?;
+
+        let witness = read_incremental_witness::<Node, _, DEPTH>(witness)?;
         builder
             .add_sapling_spend(
-                extsk.clone(),
-                *note.recipient().diversifier(),
+                extsk.to_diversifiable_full_viewing_key().fvk().clone(),
                 note.clone(),
                 witness.path().ok_or("Commitment Tree is empty")?,
             )
@@ -550,7 +578,7 @@ fn choose_notes(
             &extsk
                 .to_diversifiable_full_viewing_key()
                 .to_nk(Scope::External),
-            witness.position() as u64,
+            witness.witnessed_position().into(),
         );
         nullifiers.push(hex::encode(nullifier.to_vec()));
         sapling_input_count += 1;
@@ -574,24 +602,32 @@ fn choose_notes(
         }
     }
 
-    let change = Amount::from_u64(total - *amount - fee).map_err(|_| "Invalid change")?;
+    let change = Zatoshis::from_u64(total - *amount - fee).map_err(|_| "Invalid change")?;
     Ok((nullifiers, change, fee))
 }
 
 fn prove_transaction(
-    builder: Builder<'_, Network, OsRng>,
+    builder: Builder<'_, Network, DefaultProgress>,
+    extsk: ExtendedSpendingKey,
+    transparent_keys: &TransparentSigningSet,
     nullifiers: Vec<String>,
     fee: u64,
-    prover: &impl TxProver,
+    prover: &ImplTxProver,
 ) -> Result<JSTransaction, Box<dyn Error>> {
     #[cfg(not(test))]
     return {
-        let (tx, _metadata) = builder.build(
-            prover,
-            &FeeRule::non_standard(Amount::from_u64(fee).map_err(|_| "Invalid fee")?),
+        let result = builder.build(
+            transparent_keys,
+            &[extsk],
+            &[],
+            OsRng,
+            &prover.1,
+            &prover.0,
+            &FeeRule::non_standard(Zatoshis::from_u64(fee).map_err(|_| "Invalid fee")?),
         )?;
 
         let mut tx_hex = vec![];
+	let tx = result.transaction();
         tx.write(&mut tx_hex)?;
 
         Ok(JSTransaction {

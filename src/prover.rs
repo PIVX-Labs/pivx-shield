@@ -1,9 +1,7 @@
-use pivx_primitives::sapling::prover::TxProver;
-
-#[cfg(test)]
-use pivx_primitives::sapling::prover::mock::MockTxProver;
 #[cfg(not(test))]
-use pivx_proofs::prover::LocalTxProver;
+use sapling::circuit::{OutputParameters, SpendParameters};
+#[cfg(test)]
+use sapling::prover::mock::{MockOutputProver, MockSpendProver};
 
 use reqwest::Client;
 use std::error::Error;
@@ -11,20 +9,21 @@ use tokio::sync::OnceCell;
 use wasm_bindgen::prelude::*;
 
 #[cfg(not(test))]
-type ImplTxProver = LocalTxProver;
+pub type ImplTxProver = (OutputParameters, SpendParameters);
 
 #[cfg(test)]
-type ImplTxProver = MockTxProver;
+pub type ImplTxProver = (MockOutputProver, MockSpendProver);
 
 static PROVER: OnceCell<ImplTxProver> = OnceCell::const_new();
 
-pub async fn get_prover() -> &'static impl TxProver {
+pub async fn get_prover() -> &'static ImplTxProver {
     let default_urls = &["https://pivxla.bz", "https://duddino.com"];
     for url in default_urls {
         if let Ok(prover) = get_with_url(url).await {
             return prover;
         }
     }
+
     panic!("Failed to download prover");
 }
 
@@ -33,7 +32,7 @@ pub async fn get_prover() -> &'static impl TxProver {
  * no request will be made
  */
 #[cfg(not(test))]
-pub async fn get_with_url(url: &str) -> Result<&'static impl TxProver, Box<dyn Error>> {
+pub async fn get_with_url(url: &str) -> Result<&'static ImplTxProver, Box<dyn Error>> {
     PROVER
         .get_or_try_init(|| async {
             let c = Client::new();
@@ -50,7 +49,7 @@ pub async fn get_with_url(url: &str) -> Result<&'static impl TxProver, Box<dyn E
 fn check_and_create_prover(
     sapling_output_bytes: &[u8],
     sapling_spend_bytes: &[u8],
-) -> Result<LocalTxProver, Box<dyn Error>> {
+) -> Result<ImplTxProver, Box<dyn Error>> {
     if sha256::digest(&*sapling_output_bytes)
         != "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4"
     {
@@ -62,9 +61,10 @@ fn check_and_create_prover(
     {
         Err("Sha256 does not match for sapling spend")?;
     }
-    Ok(LocalTxProver::from_bytes(
-        &sapling_spend_bytes,
-        &sapling_output_bytes,
+
+    Ok((
+        OutputParameters::read(sapling_output_bytes, false)?,
+        SpendParameters::read(sapling_spend_bytes, false)?,
     ))
 }
 
@@ -72,7 +72,7 @@ fn check_and_create_prover(
 pub async fn init_with_bytes(
     sapling_output_bytes: &[u8],
     sapling_spend_bytes: &[u8],
-) -> Result<&'static impl TxProver, Box<dyn Error>> {
+) -> Result<&'static ImplTxProver, Box<dyn Error>> {
     PROVER
         .get_or_try_init(|| async {
             check_and_create_prover(sapling_output_bytes, sapling_spend_bytes)
@@ -84,13 +84,17 @@ pub async fn init_with_bytes(
 pub async fn init_with_bytes(
     _sapling_output_bytes: &[u8],
     _sapling_spend_bytes: &[u8],
-) -> Result<&'static impl TxProver, Box<dyn Error>> {
-    Ok(PROVER.get_or_init(|| async { MockTxProver }).await)
+) -> Result<&'static ImplTxProver, Box<dyn Error>> {
+    Ok(PROVER
+        .get_or_init(|| async { (MockOutputProver, MockSpendProver) })
+        .await)
 }
 
 #[cfg(test)]
-pub async fn get_with_url(_url: &str) -> Result<&'static impl TxProver, Box<dyn Error>> {
-    Ok(PROVER.get_or_init(|| async { MockTxProver }).await)
+pub async fn get_with_url(_url: &str) -> Result<&'static ImplTxProver, Box<dyn Error>> {
+    Ok(PROVER
+        .get_or_init(|| async { (MockOutputProver, MockSpendProver) })
+        .await)
 }
 
 #[wasm_bindgen]
