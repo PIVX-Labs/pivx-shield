@@ -1,5 +1,6 @@
 pub use crate::keys::decode_extended_full_viewing_key;
 pub use crate::keys::decode_extsk;
+use crate::keys::encode_payment_address;
 use crate::prover::get_prover;
 use crate::prover::ImplTxProver;
 use incrementalmerkletree::frontier::CommitmentTree;
@@ -21,7 +22,10 @@ use pivx_primitives::transaction::builder::BuildConfig;
 pub use pivx_primitives::transaction::builder::Progress;
 use pivx_primitives::transaction::components::transparent::builder::TransparentSigningSet;
 use pivx_protocol::value::Zatoshis;
+use sapling::builder::ProverProgress;
+use sapling::Anchor;
 use secp256k1::Secp256k1;
+use wasm_bindgen_test::console_log;
 
 use crate::keys::decode_generic_address;
 use crate::keys::GenericAddress;
@@ -57,7 +61,7 @@ mod test;
 static TX_PROGRESS_LOCK: AtomicF32 = AtomicF32::new(0.0);
 
 #[cfg(feature = "multicore")]
-type DefaultProgress = Sender;
+type DefaultProgress = Sender<(u32, u32)>;
 #[cfg(not(feature = "multicore"))]
 type DefaultProgress = ();
 
@@ -137,7 +141,7 @@ impl SpendableNote {
     }
     fn to_js_spendable_note(self) -> Result<JSSpendableNote, Box<dyn Error>> {
         let mut buff = Vec::new();
-	write_incremental_witness(witness, &mut buff)?;
+        write_incremental_witness(&self.witness, &mut buff)?;
         Ok(JSSpendableNote {
             note: self.note,
             witness: hex::encode(&buff),
@@ -165,7 +169,7 @@ pub fn handle_blocks(
     let extfvk =
         decode_extended_full_viewing_key(enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
     let key = UnifiedFullViewingKey::from_sapling_extended_full_viewing_key(extfvk)
-        .map_err(|_|"Failed to create unified full viewing key")?;
+        .map_err(|_| "Failed to create unified full viewing key")?;
     let mut comp_note = comp_note
         .into_iter()
         .map(|n| SpendableNote::from_js_spendable_note(n))
@@ -185,7 +189,8 @@ pub fn handle_blocks(
                 &mut comp_note,
                 &mut new_notes,
             )
-            .map_err(|_| "Couldn't handle transaction")?
+            .unwrap()
+            //.map_err(|_| "Couldn't handle transaction")?
             .into_iter()
             .map(|n| hex::encode(n.0))
             .collect::<Vec<_>>();
@@ -269,7 +274,7 @@ pub fn handle_transaction(
                     .map_err(|_| "Failed to add cmu to witness")?;
             }
             for output in decrypted_tx.sapling_outputs() {
-		let (note, index) = (output.note(), output.index());
+                let (note, index) = (output.note(), output.index());
                 if index == i {
                     // Save witness
                     let witness = IncrementalWitness::<Node, DEPTH>::from_tree(tree.clone());
@@ -405,14 +410,31 @@ pub async fn create_transaction_internal(
     block_height: BlockHeight,
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
+    let anchor = if let Either::Left(ref notes) = inputs {
+        match notes.get(0) {
+            Some((_, witness)) => {
+                let witness = Cursor::new(hex::decode(witness)?);
+
+                let witness = read_incremental_witness::<Node, _, DEPTH>(witness)?;
+
+                Anchor::from_bytes(witness.root().to_bytes()).into_option()
+            }
+            None => None,
+        }
+    } else {
+        None
+    };
+
     let mut builder = Builder::new(
         network,
         block_height,
         BuildConfig::Standard {
-            sapling_anchor: None,
+            sapling_anchor: Some(anchor.unwrap_or(Anchor::empty_tree())),
             orchard_anchor: None,
         },
     );
+
+    let mut transparent_signing_set = TransparentSigningSet::new();
 
     let (transparent_output_count, sapling_output_count) =
         if to_address.starts_with(network.hrp_sapling_payment_address()) {
@@ -435,18 +457,29 @@ pub async fn create_transaction_internal(
             &mut amount,
             transparent_output_count,
             sapling_output_count,
+            &mut transparent_signing_set,
         )?,
     };
     let amount = Zatoshis::from_u64(amount).map_err(|_| "Invalid Amount")?;
     let to_address = decode_generic_address(network, to_address)?;
 
     match to_address {
-        GenericAddress::Transparent(x) => builder
-            .add_transparent_output(&x, amount)
-            .map_err(|_| "Failed to add output")?,
-        GenericAddress::Shield(x) => builder
-            .add_sapling_output(None, x, amount, MemoBytes::empty())
-            .map_err(|_| "Failed to add output")?,
+        GenericAddress::Transparent(x) => builder.add_transparent_output(&x, amount).unwrap(),
+        GenericAddress::Shield(x) => {
+            console_log!(
+                "{:?}\n{}",
+                x,
+                encode_payment_address(false, &x.to_bytes())
+                    .unwrap()
+                    .as_string()
+                    .unwrap()
+            );
+
+            builder
+                .add_sapling_output::<FeeRule>(None, x, amount, MemoBytes::empty())
+                .unwrap()
+        }
+        //            .map_err(|_| "Failed to add output")?,
     }
 
     if change.is_positive() {
@@ -456,7 +489,7 @@ pub async fn create_transaction_internal(
                 .add_transparent_output(&x, change)
                 .map_err(|_| "Failed to add transparent change")?,
             GenericAddress::Shield(x) => builder
-                .add_sapling_output(None, x, change, MemoBytes::empty())
+                .add_sapling_output::<FeeRule>(None, x, change, MemoBytes::empty())
                 .map_err(|_| "Failed to add shield change")?,
         }
     }
@@ -466,7 +499,7 @@ pub async fn create_transaction_internal(
     {
         let (transmitter, mut receiver): (Sender<Progress>, Receiver<Progress>) =
             tokio::sync::mpsc::channel(1);
-        builder.with_progress_notifier(transmitter);
+        let mut builder = builder.with_progress_notifier(transmitter);
         let tx_progress_future = async {
             loop {
                 if let Some(status) = receiver.recv().await {
@@ -482,8 +515,17 @@ pub async fn create_transaction_internal(
         };
 
         let (transmitter, mut receiver) = tokio::sync::mpsc::channel(1);
+        let extsk_clone = extsk.clone();
         rayon::spawn(move || {
-            let res = prove_transaction(builder, nullifiers, fee, prover).unwrap();
+            let res = prove_transaction(
+                builder,
+                extsk_clone,
+                &transparent_signing_set,
+                nullifiers,
+                fee,
+                prover,
+            )
+            .unwrap();
             transmitter
                 .blocking_send(res)
                 .unwrap_or_else(|_| panic!("Cannot transmit tx"));
@@ -492,15 +534,23 @@ pub async fn create_transaction_internal(
         return Ok(res.ok_or("Fail to receive tx proof")?);
     }
     #[cfg(not(feature = "multicore"))]
-    prove_transaction(builder, nullifiers, fee, prover)
+    prove_transaction(
+        builder,
+        extsk.clone(),
+        &transparent_signing_set,
+        nullifiers,
+        fee,
+        prover,
+    )
 }
 
 fn choose_utxos(
-    builder: &mut Builder<Network, DefaultProgress>,
+    builder: &mut Builder<Network, impl ProverProgress>,
     utxos: &[Utxo],
     amount: &mut u64,
     transparent_output_count: u64,
     sapling_output_count: u64,
+    transparent_signing_set: &mut TransparentSigningSet,
 ) -> Result<(Vec<String>, Zatoshis, u64), Box<dyn Error>> {
     let mut total = 0;
     let mut used_utxos = vec![];
@@ -509,9 +559,10 @@ fn choose_utxos(
     let secp = Secp256k1::new();
     for utxo in utxos {
         used_utxos.push(format!("{},{}", utxo.txid, utxo.vout));
+        let key = SecretKey::from_slice(&utxo.private_key)?;
         builder
             .add_transparent_input(
-                SecretKey::from_slice(&utxo.private_key)?.public_key(&secp),
+                key.public_key(&secp),
                 OutPoint::new(
                     hex::decode(&utxo.txid)?
                         .into_iter()
@@ -527,6 +578,7 @@ fn choose_utxos(
                 },
             )
             .map_err(|_| "Failed to use utxo")?;
+        transparent_signing_set.add_key(key);
         transparent_input_count += 1;
         fee = fee_calculator(
             transparent_input_count,
@@ -552,7 +604,7 @@ fn choose_utxos(
 }
 
 fn choose_notes(
-    builder: &mut Builder<Network, DefaultProgress>,
+    builder: &mut Builder<Network, impl ProverProgress>,
     notes: &[(Note, String)],
     extsk: &ExtendedSpendingKey,
     amount: &mut u64,
@@ -568,12 +620,13 @@ fn choose_notes(
 
         let witness = read_incremental_witness::<Node, _, DEPTH>(witness)?;
         builder
-            .add_sapling_spend(
+            .add_sapling_spend::<FeeRule>(
                 extsk.to_diversifiable_full_viewing_key().fvk().clone(),
                 note.clone(),
                 witness.path().ok_or("Commitment Tree is empty")?,
             )
-            .map_err(|_| "Failed to add sapling spend")?;
+            .unwrap();
+        //          .map_err(|_| "Failed to add sapling spend")?;
         let nullifier = note.nf(
             &extsk
                 .to_diversifiable_full_viewing_key()
@@ -607,44 +660,31 @@ fn choose_notes(
 }
 
 fn prove_transaction(
-    builder: Builder<'_, Network, DefaultProgress>,
+    builder: Builder<'_, Network, impl ProverProgress>,
     extsk: ExtendedSpendingKey,
     transparent_keys: &TransparentSigningSet,
     nullifiers: Vec<String>,
     fee: u64,
     prover: &ImplTxProver,
 ) -> Result<JSTransaction, Box<dyn Error>> {
-    #[cfg(not(test))]
-    return {
-        let result = builder.build(
-            transparent_keys,
-            &[extsk],
-            &[],
-            OsRng,
-            &prover.1,
-            &prover.0,
-            &FeeRule::non_standard(Zatoshis::from_u64(fee).map_err(|_| "Invalid fee")?),
-        )?;
+    let result = builder.build(
+        transparent_keys,
+        &[extsk],
+        &[],
+        OsRng,
+        &prover.1,
+        &prover.0,
+        &FeeRule::non_standard(Zatoshis::from_u64(fee).map_err(|_| "Invalid fee")?),
+    )?;
 
-        let mut tx_hex = vec![];
-	let tx = result.transaction();
-        tx.write(&mut tx_hex)?;
+    let mut tx_hex = vec![];
+    let tx = result.transaction();
+    //console_log!("{:?}", tx);
+    tx.write(&mut tx_hex)?;
 
-        Ok(JSTransaction {
-            txid: tx.txid().to_string(),
-            txhex: hex::encode(tx_hex),
-            nullifiers,
-        })
-    };
-    #[cfg(test)]
-    {
-        // At this point we would use .mock_build()
-        // However it returns an error for some reason
-        // So let's just return the nullifiers and test those
-        Ok(JSTransaction {
-            txid: String::default(),
-            txhex: String::default(),
-            nullifiers,
-        })
-    }
+    Ok(JSTransaction {
+        txid: tx.txid().to_string(),
+        txhex: hex::encode(tx_hex),
+        nullifiers,
+    })
 }

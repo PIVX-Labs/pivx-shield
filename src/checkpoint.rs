@@ -28,8 +28,10 @@ pub fn get_checkpoint(block_height: i32, is_testnet: bool) -> (i32, &'static str
 #[cfg(test)]
 mod test {
     use crate::checkpoint::get_checkpoint;
-    use pivx_primitives::merkle_tree::CommitmentTree;
-    use pivx_primitives::sapling::Node;
+    use crate::transaction::DEPTH;
+    use incrementalmerkletree::frontier::CommitmentTree;
+    use pivx_primitives::merkle_tree::read_commitment_tree;
+    use sapling::Node;
     use std::error::Error;
     use std::io::Cursor;
     #[test]
@@ -42,7 +44,7 @@ mod test {
         assert_eq!(get_checkpoint((907200 + 950400) / 2, true).0, 907200);
         // Block 0 should yield an empty commitment tree
         let tree = Cursor::new(hex::decode(get_checkpoint(0, true).1)?);
-        let tree = CommitmentTree::<Node>::read(tree)?;
+        let tree: CommitmentTree<Node, DEPTH> = read_commitment_tree(tree)?;
         assert_eq!(tree, CommitmentTree::empty());
         Ok(())
     }
@@ -59,7 +61,7 @@ mod test {
         assert_eq!(get_checkpoint((3758400 + 3715200) / 2, false).0, 3715200);
         // First checkpoint should return an empty commitment tree
         let buff = Cursor::new(hex::decode(get_checkpoint(2700000, false).1)?);
-        let tree = CommitmentTree::<Node>::read(buff)?;
+        let tree: CommitmentTree<Node, DEPTH> = read_commitment_tree(buff)?;
         assert_eq!(tree, CommitmentTree::empty());
         Ok(())
     }

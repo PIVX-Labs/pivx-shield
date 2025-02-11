@@ -14,7 +14,7 @@ pkg_multicore: src/ Cargo.toml
 	  wasm-pack build --weak-refs --out-dir "pkg_multicore" --target web -- --features="multicore" -Z build-std=panic_abort,std
 	sed -i 's/pivx-shield-rust/pivx-shield-rust-multicore/' pkg_multicore/package.json
 	sed -i 's/pivx_shield_rust_bg.wasm/*/' pkg_multicore/package.json
-	sed -i 's+../../../+../../../pivx_shield_rust.js+g' pkg_multicore/snippets/wasm-bindgen-rayon*/src/worker*.js
+	sed -i 's+../../..+../../../pivx_shield_rust.js+g' pkg_multicore/snippets/wasm-bindgen-rayon*/src/worker*.js
 	cp wrong-package.md pkg_multicore/README.md
 
 js/README.md: README.md

@@ -4,6 +4,7 @@ use pivx_primitives::consensus::{Parameters, MAIN_NETWORK, TEST_NETWORK};
 use wasm_bindgen::prelude::*;
 
 use ::sapling::PaymentAddress;
+use pivx_primitives::consensus::NetworkConstants;
 use pivx_primitives::zip32::AccountId;
 use pivx_primitives::zip32::DiversifierIndex;
 use sapling::ExtendedFullViewingKey;
@@ -167,10 +168,10 @@ pub fn generate_next_shielding_payment_address(
 ) -> Result<JsValue, JsValue> {
     let extfvk =
         decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
-    let diversifier_index: [u8; 11] = diversifier_index.try_into().map_err(|_| "Invalid diversifier index")?;
-    let mut diversifier_index = DiversifierIndex::from(
-        diversifier_index
-    );
+    let diversifier_index: [u8; 11] = diversifier_index
+        .try_into()
+        .map_err(|_| "Invalid diversifier index")?;
+    let mut diversifier_index = DiversifierIndex::from(diversifier_index);
     diversifier_index
         .increment()
         .map_err(|_| "No valid indeces left")?;

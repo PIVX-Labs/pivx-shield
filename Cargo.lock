@@ -141,27 +141,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bellman"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9afceed28bac7f9f5a508bca8aeeff51cdfa4770c0b967ac55c621e2ddfd6171"
-dependencies = [
- "bitvec",
- "blake2s_simd",
- "byteorder",
- "crossbeam-channel",
- "ff",
- "group",
- "lazy_static",
- "log",
- "num_cpus",
- "pairing",
- "rand_core",
- "rayon",
- "subtle",
-]
-
-[[package]]
 name = "bip32"
 version = "0.6.0-pre.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1557,12 +1536,13 @@ name = "pivx-shield-rust"
 version = "1.1.6"
 dependencies = [
  "atomic_float",
- "bellman 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bellman",
  "console_error_panic_hook",
  "either",
  "getrandom 0.2.15",
  "hex",
  "incrementalmerkletree",
+ "jubjub",
  "rand_core",
  "rayon",
  "reqwest",
@@ -2006,7 +1986,7 @@ name = "sapling"
 version = "0.4.0"
 dependencies = [
  "aes",
- "bellman 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "bellman",
  "bitvec",
  "blake2b_simd",
  "blake2s_simd",
@@ -3133,7 +3113,7 @@ dependencies = [
 name = "zcash_proofs"
 version = "0.21.0"
 dependencies = [
- "bellman 0.14.0",
+ "bellman",
  "blake2b_simd",
  "bls12_381",
  "document-features",
