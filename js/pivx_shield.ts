@@ -569,6 +569,21 @@ export class PIVXShield {
     }
   }
 
+  async proverIsLoaded() {
+    return await this.callWorker<boolean>("prover_is_loaded");
+  }
+
+  async loadSaplingProverWithBytes(
+    sapling_output_bytes: Uint8Array,
+    sapling_spend_bytes: Uint8Array,
+  ) {
+    return await this.callWorker<boolean>(
+      "load_prover_with_bytes",
+      sapling_output_bytes,
+      sapling_spend_bytes,
+    );
+  }
+
   /**
    * @returns The last block that has been decoded
    */
