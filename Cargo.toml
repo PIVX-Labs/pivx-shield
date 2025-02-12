@@ -22,9 +22,6 @@ getrandom = { version = "0.2.15", features = ["js"] }
 reqwest = { version = "0.12.0", features = ["blocking"] }
 wasm-bindgen = "0.2.93" # Wasm-bindgen makes stdweb fail to compile. See https://github.com/koute/stdweb/issues/427
 wasm-bindgen-futures = "0.4.43"
-#zcash_client_backend = { path="../librustzcash/zcash_client_backend/" }
-#zcash_primitives = { path="../librustzcash/zcash_primitives/", default-features = false, features = ["transparent-inputs", "std"] }
-#zcash_proofs = { path="../librustzcash/zcash_proofs/", default-features = false }
 pivx_client_backend = { package = "zcash_client_backend", path="../librustzcash/zcash_client_backend/" }
 pivx_primitives = { package = "zcash_primitives", path="../librustzcash/zcash_primitives/", default-features = false, features = ["transparent-inputs", "circuits", "std", "non-standard-fees"] }
 pivx_proofs = { package = "zcash_proofs", path="../librustzcash/zcash_proofs/", default-features = false }
@@ -50,7 +47,7 @@ wasm-bindgen-rayon = { version = "1.2.1", optional = true }
 rand_core = "0.6.4"
 atomic_float = "1.1.0"
 bellman = {path="../librustzcash/bellman/", features = ["groth16"]}
-wasm-bindgen-test = "0.3.13"
+
 [dev-dependencies]
 tokio = { version = "1.40.0", features = ["full"] }
 #zcash_primitives = { path="../librustzcash/zcash_primitives/", default-features = false, features = ["transparent-inputs", "test-dependencies"] }

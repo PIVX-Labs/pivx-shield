@@ -22,7 +22,6 @@ use pivx_protocol::value::Zatoshis;
 use sapling::builder::ProverProgress;
 use sapling::Anchor;
 use secp256k1::Secp256k1;
-use wasm_bindgen_test::console_log;
 
 use crate::keys::decode_generic_address;
 use crate::keys::GenericAddress;
@@ -180,8 +179,7 @@ pub fn handle_blocks(
                 &mut comp_note,
                 &mut new_notes,
             )
-            .unwrap()
-            //.map_err(|_| "Couldn't handle transaction")?
+            .map_err(|_| "Couldn't handle transaction")?
             .into_iter()
             .map(|n| hex::encode(n.0))
             .collect::<Vec<_>>();
@@ -456,20 +454,9 @@ pub async fn create_transaction_internal(
 
     match to_address {
         GenericAddress::Transparent(x) => builder.add_transparent_output(&x, amount).unwrap(),
-        GenericAddress::Shield(x) => {
-            console_log!(
-                "{:?}\n{}",
-                x,
-                encode_payment_address(false, &x.to_bytes())
-                    .unwrap()
-                    .as_string()
-                    .unwrap()
-            );
-
-            builder
-                .add_sapling_output::<FeeRule>(None, x, amount, MemoBytes::empty())
-                .unwrap()
-        } //            .map_err(|_| "Failed to add output")?,
+        GenericAddress::Shield(x) => builder
+            .add_sapling_output::<FeeRule>(None, x, amount, MemoBytes::empty())
+            .map_err(|_| "Failed to add output")?,
     }
 
     if change.is_positive() {
@@ -615,8 +602,7 @@ fn choose_notes(
                 note.clone(),
                 witness.path().ok_or("Commitment Tree is empty")?,
             )
-            .unwrap();
-        //          .map_err(|_| "Failed to add sapling spend")?;
+            .map_err(|_| "Failed to add sapling spend")?;
         let nullifier = note.nf(
             &extsk
                 .to_diversifiable_full_viewing_key()
@@ -669,7 +655,6 @@ fn prove_transaction(
 
     let mut tx_hex = vec![];
     let tx = result.transaction();
-    //console_log!("{:?}", tx);
     tx.write(&mut tx_hex)?;
 
     Ok(JSTransaction {
