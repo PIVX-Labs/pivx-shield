@@ -1092,15 +1092,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "incrementalmerkletree"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30821f91f0fa8660edca547918dc59812893b497d07c1144f326f07fdd94aba9"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "indexmap"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1448,7 +1439,7 @@ dependencies = [
  "halo2_poseidon",
  "halo2_proofs",
  "hex",
- "incrementalmerkletree 0.7.1",
+ "incrementalmerkletree",
  "lazy_static",
  "memuse",
  "nonempty",
@@ -1550,7 +1541,7 @@ dependencies = [
  "either",
  "getrandom 0.2.15",
  "hex",
- "incrementalmerkletree 0.8.2",
+ "incrementalmerkletree",
  "jubjub",
  "rand_core",
  "rayon",
@@ -2008,7 +1999,7 @@ dependencies = [
  "getset",
  "group",
  "hex",
- "incrementalmerkletree 0.7.1",
+ "incrementalmerkletree",
  "jubjub",
  "lazy_static",
  "memuse",
@@ -2187,7 +2178,7 @@ checksum = "b5f2390975ebfe8838f9e861f7a588123d49a7a7a0a08568ea831d8ad53fc9b4"
 dependencies = [
  "bitflags",
  "either",
- "incrementalmerkletree 0.7.1",
+ "incrementalmerkletree",
  "tracing",
 ]
 
@@ -3007,7 +2998,7 @@ dependencies = [
  "document-features",
  "group",
  "hex",
- "incrementalmerkletree 0.7.1",
+ "incrementalmerkletree",
  "memuse",
  "nom",
  "nonempty",
@@ -3096,7 +3087,7 @@ dependencies = [
  "getset",
  "group",
  "hex",
- "incrementalmerkletree 0.7.1",
+ "incrementalmerkletree",
  "jubjub",
  "memuse",
  "nonempty",
