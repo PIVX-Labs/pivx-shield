@@ -1,25 +1,22 @@
-pub use crate::keys::decode_extended_full_viewing_key;
-pub use crate::keys::decode_extsk;
+use crate::keys::decode_extended_full_viewing_key;
+use crate::keys::decode_extsk;
 use crate::keys::encode_payment_address;
 use crate::prover::get_prover;
 use crate::prover::ImplTxProver;
 use incrementalmerkletree::frontier::CommitmentTree;
 use incrementalmerkletree::witness::IncrementalWitness;
-use incrementalmerkletree::MerklePath;
-pub use pivx_client_backend::decrypt_transaction;
-pub use pivx_client_backend::keys::UnifiedFullViewingKey;
+use pivx_client_backend::decrypt_transaction;
+use pivx_client_backend::keys::UnifiedFullViewingKey;
 use pivx_primitives::consensus::Network;
 use pivx_primitives::consensus::NetworkConstants;
-pub use pivx_primitives::consensus::Parameters;
-pub use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
+use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
 use pivx_primitives::legacy::Script;
-pub use pivx_primitives::memo::MemoBytes;
+use pivx_primitives::memo::MemoBytes;
 use pivx_primitives::merkle_tree::read_commitment_tree as zcash_read_commitment_tree;
 use pivx_primitives::merkle_tree::read_incremental_witness;
 use pivx_primitives::merkle_tree::write_commitment_tree;
 use pivx_primitives::merkle_tree::write_incremental_witness;
 use pivx_primitives::transaction::builder::BuildConfig;
-pub use pivx_primitives::transaction::builder::Progress;
 use pivx_primitives::transaction::components::transparent::builder::TransparentSigningSet;
 use pivx_protocol::value::Zatoshis;
 use sapling::builder::ProverProgress;
@@ -31,39 +28,33 @@ use crate::keys::decode_generic_address;
 use crate::keys::GenericAddress;
 #[cfg(feature = "multicore")]
 use atomic_float::AtomicF32;
-pub use either::Either;
-pub use pivx_primitives::transaction::builder::Builder;
-pub use pivx_primitives::transaction::components::Amount;
-use pivx_primitives::transaction::components::{OutPoint, TxOut};
-pub use pivx_primitives::transaction::fees::fixed::FeeRule;
-pub use pivx_primitives::transaction::Transaction;
-pub use pivx_primitives::zip32::AccountId;
-pub use pivx_primitives::zip32::Scope;
+use either::Either;
+use pivx_primitives::transaction::builder::Builder;
+use pivx_primitives::transaction::fees::fixed::FeeRule;
+use pivx_primitives::transaction::Transaction;
+use pivx_primitives::zip32::AccountId;
+use pivx_primitives::zip32::Scope;
 use rand_core::OsRng;
-use sapling::zip32::ExtendedFullViewingKey;
-pub use sapling::zip32::ExtendedSpendingKey;
-pub use sapling::{note::Note, Node, Nullifier};
+use sapling::zip32::ExtendedSpendingKey;
+use sapling::{note::Note, Node, Nullifier};
+use zcash_transparent::bundle::{OutPoint, TxOut};
 
+#[cfg(feature = "multicore")]
+use pivx_primitives::transaction::builder::Progress;
 use sapling::NullifierDerivingKey;
 use secp256k1::SecretKey;
-pub use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
-pub use std::path::Path;
 #[cfg(feature = "multicore")]
 use std::sync::atomic::Ordering;
-pub use std::{collections::HashMap, error::Error, io::Cursor};
+use std::{collections::HashMap, error::Error, io::Cursor};
 #[cfg(feature = "multicore")]
 use tokio::{join, sync::mpsc::Receiver, sync::mpsc::Sender};
-pub use wasm_bindgen::prelude::*;
+use wasm_bindgen::prelude::*;
 mod test;
 
 #[cfg(feature = "multicore")]
 static TX_PROGRESS_LOCK: AtomicF32 = AtomicF32::new(0.0);
-
-#[cfg(feature = "multicore")]
-type DefaultProgress = Sender<(u32, u32)>;
-#[cfg(not(feature = "multicore"))]
-type DefaultProgress = ();
 
 pub const DEPTH: u8 = 32;
 
@@ -139,7 +130,7 @@ impl SpendableNote {
             nullifier: n.nullifier,
         })
     }
-    fn to_js_spendable_note(self) -> Result<JSSpendableNote, Box<dyn Error>> {
+    fn into_js_spendable_note(self) -> Result<JSSpendableNote, Box<dyn Error>> {
         let mut buff = Vec::new();
         write_incremental_witness(&self.witness, &mut buff)?;
         Ok(JSSpendableNote {
@@ -228,7 +219,7 @@ pub fn serialize_comp_note(
 ) -> Result<Vec<JSSpendableNote>, Box<dyn Error>> {
     comp_note
         .into_iter()
-        .map(|n| SpendableNote::to_js_spendable_note(n))
+        .map(|n| SpendableNote::into_js_spendable_note(n))
         .collect()
 }
 
@@ -238,7 +229,7 @@ pub fn handle_transaction(
     tx: &str,
     key: UnifiedFullViewingKey,
     is_testnet: bool,
-    witnesses: &mut Vec<SpendableNote>,
+    witnesses: &mut [SpendableNote],
     new_witnesses: &mut Vec<SpendableNote>,
 ) -> Result<Vec<Nullifier>, Box<dyn Error>> {
     let tx = Transaction::read(
@@ -251,7 +242,7 @@ pub fn handle_transaction(
         .ok_or("Cannot generate nullifier key")?
         .to_nk(Scope::External);
     hash.insert(AccountId::default(), key);
-    let mut decrypted_tx = if is_testnet {
+    let decrypted_tx = if is_testnet {
         decrypt_transaction(&TEST_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
     } else {
         decrypt_transaction(&MAIN_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
@@ -278,7 +269,7 @@ pub fn handle_transaction(
                 if index == i {
                     // Save witness
                     let witness = IncrementalWitness::<Node, DEPTH>::from_tree(tree.clone());
-                    let nullifier = get_nullifier_from_note_internal(&nullif_key, &note, &witness)?;
+                    let nullifier = get_nullifier_from_note_internal(&nullif_key, note, &witness)?;
                     new_witnesses.push(SpendableNote {
                         note: note.clone(),
                         witness,
@@ -319,7 +310,7 @@ pub fn get_nullifier_from_note_internal(
     witness: &IncrementalWitness<Node, DEPTH>,
 ) -> Result<String, Box<dyn Error>> {
     let path = witness.path().ok_or("Cannot find witness path")?;
-    Ok(hex::encode(note.nf(&nullif_key, path.position().into()).0))
+    Ok(hex::encode(note.nf(nullif_key, path.position().into()).0))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -372,7 +363,7 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
     } else {
         Network::MainNetwork
     };
-    let input = if let Some(mut notes) = notes {
+    let input = if let Some(notes) = notes {
         let mut notes: Vec<(Note, String)> =
             notes.into_iter().map(|n| (n.note, n.witness)).collect();
         notes.sort_by_key(|(note, _)| note.value().inner());
@@ -411,7 +402,7 @@ pub async fn create_transaction_internal(
     network: Network,
 ) -> Result<JSTransaction, Box<dyn Error>> {
     let anchor = if let Either::Left(ref notes) = inputs {
-        match notes.get(0) {
+        match notes.first() {
             Some((_, witness)) => {
                 let witness = Cursor::new(hex::decode(witness)?);
 
@@ -478,8 +469,7 @@ pub async fn create_transaction_internal(
             builder
                 .add_sapling_output::<FeeRule>(None, x, amount, MemoBytes::empty())
                 .unwrap()
-        }
-        //            .map_err(|_| "Failed to add output")?,
+        } //            .map_err(|_| "Failed to add output")?,
     }
 
     if change.is_positive() {
@@ -499,7 +489,7 @@ pub async fn create_transaction_internal(
     {
         let (transmitter, mut receiver): (Sender<Progress>, Receiver<Progress>) =
             tokio::sync::mpsc::channel(1);
-        let mut builder = builder.with_progress_notifier(transmitter);
+        let builder = builder.with_progress_notifier(transmitter);
         let tx_progress_future = async {
             loop {
                 if let Some(status) = receiver.recv().await {

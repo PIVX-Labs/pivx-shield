@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use pivx_primitives::consensus::{Parameters, MAIN_NETWORK, TEST_NETWORK};
+use pivx_primitives::consensus::{MAIN_NETWORK, TEST_NETWORK};
 use wasm_bindgen::prelude::*;
 
 use ::sapling::PaymentAddress;
@@ -10,13 +10,13 @@ use pivx_primitives::zip32::DiversifierIndex;
 use sapling::ExtendedFullViewingKey;
 use sapling::ExtendedSpendingKey;
 
-use pivx_client_backend::encoding;
 use pivx_client_backend::encoding::decode_payment_address;
 use pivx_client_backend::encoding::decode_transparent_address;
 use pivx_client_backend::keys::sapling;
 use pivx_primitives::consensus::Network;
 use pivx_primitives::legacy::TransparentAddress;
 use std::error::Error;
+use zcash_keys::encoding;
 // Data needed to generate an extended spending key
 #[derive(Serialize, Deserialize)]
 pub struct JSExtendedSpendingKeySerData {
@@ -193,6 +193,7 @@ pub fn generate_extended_full_viewing_key(
     is_testnet: bool,
 ) -> Result<JsValue, JsValue> {
     let extsk = decode_extsk(&enc_extsk, is_testnet).map_err(|e| e.to_string())?;
+    #[allow(deprecated)]
     let extfvk = extsk.to_extended_full_viewing_key();
     let enc_extfvk = encode_extended_full_viewing_key(&extfvk, is_testnet);
     Ok(serde_wasm_bindgen::to_value(&enc_extfvk)?)

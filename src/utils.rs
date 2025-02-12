@@ -1,8 +1,6 @@
 use std::io::Cursor;
 
-use incrementalmerkletree::frontier::CommitmentTree;
 use pivx_primitives::merkle_tree::{read_commitment_tree, HashSer};
-use pivx_protocol::value::{ZatBalance, Zatoshis};
 use sapling::Node;
 use wasm_bindgen::prelude::*;
 
@@ -32,9 +30,4 @@ pub fn get_sapling_root(tree_hex: &str) -> Result<JsValue, JsValue> {
         .write(&mut root)
         .map_err(|_| "Cannot write sapling root")?;
     Ok(JsValue::from_str(&hex::encode(root)))
-}
-
-pub fn zat_balance_to_zatoshis(zat_balance: ZatBalance) -> Zatoshis {
-    todo!()
-    //    (Zatoshis::const_from_u64(0) + zat_balance).expect("invalid zataoshis")
 }

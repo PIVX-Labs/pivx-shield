@@ -50,13 +50,13 @@ fn check_and_create_prover(
     sapling_output_bytes: &[u8],
     sapling_spend_bytes: &[u8],
 ) -> Result<ImplTxProver, Box<dyn Error>> {
-    if sha256::digest(&*sapling_output_bytes)
+    if sha256::digest(sapling_output_bytes)
         != "2f0ebbcbb9bb0bcffe95a397e7eba89c29eb4dde6191c339db88570e3f3fb0e4"
     {
         Err("Sha256 does not match for sapling output")?;
     }
 
-    if sha256::digest(&*sapling_spend_bytes)
+    if sha256::digest(sapling_spend_bytes)
         != "8e48ffd23abb3a5fd9c5589204f32d9c31285a04b78096ba40a79b75677efc13"
     {
         Err("Sha256 does not match for sapling spend")?;

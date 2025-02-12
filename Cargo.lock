@@ -1563,6 +1563,7 @@ dependencies = [
  "zcash_primitives",
  "zcash_proofs",
  "zcash_protocol",
+ "zcash_transparent",
 ]
 
 [[package]]
@@ -2004,6 +2005,7 @@ dependencies = [
  "memuse",
  "rand",
  "rand_core",
+ "rayon",
  "redjubjub",
  "serde",
  "subtle",
@@ -3154,6 +3156,7 @@ dependencies = [
  "blake2b_simd",
  "bs58",
  "core2",
+ "document-features",
  "getset",
  "hex",
  "ripemd 0.1.3",
