@@ -62,7 +62,7 @@ export class PIVXShield {
   /**
    * Webassembly object that holds Shield related functions
    */
-  private shieldWorker: Worker;
+  private static shieldWorker: Worker;
 
   /**
    * Extended spending key
@@ -115,33 +115,38 @@ export class PIVXShield {
    */
   private mapNullifierNote: Map<string, SimplifiedNote> = new Map();
 
-  private promises: Map<
+  private static promises: Map<
     string,
     { res: (...args: any) => void; rej: (...args: any) => void }
   > = new Map();
 
-  private initWorker() {
-    this.shieldWorker.onmessage = (msg) => {
-      const promise = this.promises.get(msg.data.uuid);
-      if (!promise)
-        throw new Error(
-          "Internal error: promise is undefined. Report this to https://github.com/PIVX-Labs/pivx-shield",
-        );
-      const { res, rej } = promise;
-      if (msg.data.rej) {
-        rej(msg.data.rej);
-      } else {
-        res(msg.data.res);
-      }
-      this.promises.delete(msg.data.uuid);
-    };
+  private static isInit = false;
+
+  private static initWorker() {
+    if (!PIVXShield.isInit) {
+      PIVXShield.isInit = true;
+      PIVXShield.shieldWorker.onmessage = (msg) => {
+        const promise = PIVXShield.promises.get(msg.data.uuid);
+        if (!promise)
+          throw new Error(
+            "Internal error: promise is undefined. Report this to https://github.com/PIVX-Labs/pivx-shield",
+          );
+        const { res, rej } = promise;
+        if (msg.data.rej) {
+          rej(msg.data.rej);
+        } else {
+          res(msg.data.res);
+        }
+        PIVXShield.promises.delete(msg.data.uuid);
+      };
+    }
   }
 
-  private async callWorker<T>(name: string, ...args: any[]): Promise<T> {
+  private static async callWorker<T>(name: string, ...args: any[]): Promise<T> {
     const uuid = genuuid();
     return await new Promise<T>((res, rej) => {
-      this.promises.set(uuid, { res, rej });
-      this.shieldWorker.postMessage({ uuid, name, args });
+      PIVXShield.promises.set(uuid, { res, rej });
+      PIVXShield.shieldWorker.postMessage({ uuid, name, args });
     });
   }
   /**
@@ -174,19 +179,20 @@ export class PIVXShield {
       throw new Error("Don't provide both a seed and an extendedSpendingKey");
     }
 
-    const shieldWorker = new Worker(
-      new URL("worker_start.js", import.meta.url),
-    );
-    await new Promise<void>((res) => {
-      shieldWorker.onmessage = (msg) => {
-        if (msg.data === "done") res();
-      };
-    });
+    if (!PIVXShield.shieldWorker) {
+      PIVXShield.shieldWorker = new Worker(
+        new URL("worker_start.js", import.meta.url),
+      );
+      await new Promise<void>((res) => {
+        PIVXShield.shieldWorker.onmessage = (msg) => {
+          if (msg.data === "done") res();
+        };
+      });
+    }
 
     const isTestnet = coinType === 1;
 
     const pivxShield = new PIVXShield(
-      shieldWorker,
       extendedSpendingKey,
       extendedFullViewingKey ?? "",
       isTestnet,
@@ -203,21 +209,21 @@ export class PIVXShield {
         coin_type: coinType,
         account_index: accountIndex,
       };
-      extendedSpendingKey = await pivxShield.callWorker(
+      extendedSpendingKey = await PIVXShield.callWorker(
         "generate_extended_spending_key_from_seed",
         serData,
       );
       pivxShield.extsk = extendedSpendingKey;
     }
     if (extendedSpendingKey) {
-      pivxShield.extfvk = await pivxShield.callWorker(
+      pivxShield.extfvk = await PIVXShield.callWorker(
         "generate_extended_full_viewing_key",
         pivxShield.extsk,
         isTestnet,
       );
     }
 
-    const [effectiveHeight, commitmentTree] = await pivxShield.callWorker<
+    const [effectiveHeight, commitmentTree] = await PIVXShield.callWorker<
       [number, string]
     >("get_closest_checkpoint", blockHeight, isTestnet);
     pivxShield.lastProcessedBlock = effectiveHeight;
@@ -226,21 +232,19 @@ export class PIVXShield {
     return pivxShield;
   }
   private constructor(
-    shieldWorker: Worker,
     extsk: string | undefined,
     extfvk: string,
     isTestnet: boolean,
     nHeight: number,
     commitmentTree: string,
   ) {
-    this.shieldWorker = shieldWorker;
     this.extsk = extsk;
     this.extfvk = extfvk;
     this.isTestnet = isTestnet;
     this.lastProcessedBlock = nHeight;
 
     this.commitmentTree = commitmentTree;
-    this.initWorker();
+    PIVXShield.initWorker();
   }
   /**
    * Load an extended spending key in order to have spending authority
@@ -251,7 +255,7 @@ export class PIVXShield {
     if (this.extsk) {
       throw new Error("A spending key is aready loaded");
     }
-    const enc_extfvk = await this.callWorker(
+    const enc_extfvk = await PIVXShield.callWorker(
       "generate_extended_full_viewing_key",
       enc_extsk,
       this.isTestnet,
@@ -285,19 +289,19 @@ export class PIVXShield {
    */
   static async load(data: string) {
     const shieldData = JSON.parse(data);
-    const shieldWorker = new Worker(
-      new URL("worker_start.js", import.meta.url),
-    );
+    if (!PIVXShield.shieldWorker) {
+      PIVXShield.shieldWorker = new Worker(
+        new URL("worker_start.js", import.meta.url),
+      );
 
+      await new Promise<void>((res) => {
+        PIVXShield.shieldWorker.onmessage = (msg) => {
+          if (msg.data === "done") res();
+        };
+      });
+    }
     const currVersion = shieldData.version ?? 0;
-
-    await new Promise<void>((res) => {
-      shieldWorker.onmessage = (msg) => {
-        if (msg.data === "done") res();
-      };
-    });
     const pivxShield = new PIVXShield(
-      shieldWorker,
       undefined,
       shieldData.extfvk,
       shieldData.isTestnet,
@@ -344,7 +348,7 @@ export class PIVXShield {
       nullifiers,
       commitment_tree,
       wallet_transactions,
-    } = await this.callWorker<TransactionResult>(
+    } = await PIVXShield.callWorker<TransactionResult>(
       "handle_blocks",
       this.commitmentTree,
       blocks.map((block) => {
@@ -387,7 +391,7 @@ export class PIVXShield {
    * Generate the nullifier for a given pair note, witness
    */
   private async generateNullifierFromNote(note: [Note, String]) {
-    return await this.callWorker<string>(
+    return await PIVXShield.callWorker<string>(
       "get_nullifier_from_note",
       note,
       this.extfvk,
@@ -396,7 +400,7 @@ export class PIVXShield {
   }
 
   private async getShieldAddressFromNote(note: Note) {
-    return await this.callWorker<string>(
+    return await PIVXShield.callWorker<string>(
       "encode_payment_address",
       this.isTestnet,
       note.recipient,
@@ -415,7 +419,7 @@ export class PIVXShield {
   }
 
   async decryptTransaction(hex: string) {
-    const res = await this.callWorker<TransactionResult>(
+    const res = await PIVXShield.callWorker<TransactionResult>(
       "handle_blocks",
       this.commitmentTree,
       [{ txs: [hex] }] satisfies RustBlock[],
@@ -475,7 +479,7 @@ export class PIVXShield {
       throw new Error("Change must have the same type of input used!");
     }
     const { txid, txhex, nullifiers } =
-      await this.callWorker<CreateTransactionReturnValue>(
+      await PIVXShield.callWorker<CreateTransactionReturnValue>(
         "create_transaction",
         {
           notes: useShieldInputs ? this.unspentNotes : null,
@@ -516,7 +520,7 @@ export class PIVXShield {
    * it always returns 0.0
    */
   async getTxStatus() {
-    return await this.callWorker<number>("read_tx_progress");
+    return await PIVXShield.callWorker<number>("read_tx_progress");
   }
   /**
    * Signals the class that a transaction was sent successfully
@@ -543,7 +547,7 @@ export class PIVXShield {
    * @returns new shield address
    */
   async getNewAddress() {
-    const { address, diversifier_index } = await this.callWorker<{
+    const { address, diversifier_index } = await PIVXShield.callWorker<{
       address: string;
       diversifier_index: number[];
     }>(
@@ -563,21 +567,21 @@ export class PIVXShield {
    */
   async loadSaplingProver(url?: string) {
     if (url) {
-      return await this.callWorker<boolean>("load_prover_with_url", url);
+      return await PIVXShield.callWorker<boolean>("load_prover_with_url", url);
     } else {
-      return await this.callWorker<boolean>("load_prover");
+      return await PIVXShield.callWorker<boolean>("load_prover");
     }
   }
 
   async proverIsLoaded() {
-    return await this.callWorker<boolean>("prover_is_loaded");
+    return await PIVXShield.callWorker<boolean>("prover_is_loaded");
   }
 
   async loadSaplingProverWithBytes(
     sapling_output_bytes: Uint8Array,
     sapling_spend_bytes: Uint8Array,
   ) {
-    return await this.callWorker<boolean>(
+    return await PIVXShield.callWorker<boolean>(
       "load_prover_with_bytes",
       sapling_output_bytes,
       sapling_spend_bytes,
@@ -602,7 +606,7 @@ export class PIVXShield {
    * @returns sapling root
    */
   async getSaplingRoot(): Promise<string> {
-    return await this.callWorker<string>(
+    return await PIVXShield.callWorker<string>(
       "get_sapling_root",
       this.commitmentTree,
     );
@@ -612,7 +616,7 @@ export class PIVXShield {
    * Reloads from checkpoint. Needs to be resynced to use
    */
   async reloadFromCheckpoint(checkpointBlock: number): Promise<void> {
-    const [effectiveHeight, commitmentTree] = await this.callWorker<
+    const [effectiveHeight, commitmentTree] = await PIVXShield.callWorker<
       [number, string]
     >("get_closest_checkpoint", checkpointBlock, this.isTestnet);
     this.commitmentTree = commitmentTree;
