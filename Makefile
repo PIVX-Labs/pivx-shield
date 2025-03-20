@@ -10,11 +10,11 @@ pkg: src/ Cargo.toml
 
 pkg_multicore: src/ Cargo.toml
 	RUSTFLAGS='-C target-feature=+atomics,+bulk-memory,+mutable-globals' \
-	  rustup run nightly-2024-09-05 \
+	  rustup run nightly-2025-01-30 \
 	  wasm-pack build --weak-refs --out-dir "pkg_multicore" --target web -- --features="multicore" -Z build-std=panic_abort,std
 	sed -i 's/pivx-shield-rust/pivx-shield-rust-multicore/' pkg_multicore/package.json
 	sed -i 's/pivx_shield_rust_bg.wasm/*/' pkg_multicore/package.json
-	sed -i 's+../../../+../../../pivx_shield_rust.js+g' pkg_multicore/snippets/wasm-bindgen-rayon*/src/worker*.js
+	sed -i 's+../../..+../../../pivx_shield_rust.js+g' pkg_multicore/snippets/wasm-bindgen-rayon*/src/worker*.js
 	cp wrong-package.md pkg_multicore/README.md
 
 js/README.md: README.md

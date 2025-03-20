@@ -1,21 +1,22 @@
 use serde::{Deserialize, Serialize};
 
-use pivx_primitives::consensus::{Parameters, MAIN_NETWORK, TEST_NETWORK};
+use pivx_primitives::consensus::{MAIN_NETWORK, TEST_NETWORK};
 use wasm_bindgen::prelude::*;
 
-use pivx_primitives::sapling::PaymentAddress;
-use pivx_primitives::zip32::sapling::ExtendedFullViewingKey;
-use pivx_primitives::zip32::sapling::ExtendedSpendingKey;
+use ::sapling::PaymentAddress;
+use pivx_primitives::consensus::NetworkConstants;
 use pivx_primitives::zip32::AccountId;
 use pivx_primitives::zip32::DiversifierIndex;
+use sapling::ExtendedFullViewingKey;
+use sapling::ExtendedSpendingKey;
 
-use pivx_client_backend::encoding;
 use pivx_client_backend::encoding::decode_payment_address;
 use pivx_client_backend::encoding::decode_transparent_address;
 use pivx_client_backend::keys::sapling;
 use pivx_primitives::consensus::Network;
 use pivx_primitives::legacy::TransparentAddress;
 use std::error::Error;
+use zcash_keys::encoding;
 // Data needed to generate an extended spending key
 #[derive(Serialize, Deserialize)]
 pub struct JSExtendedSpendingKeySerData {
@@ -42,7 +43,8 @@ pub fn decode_generic_address(
             &network.b58_pubkey_address_prefix(),
             &network.b58_script_address_prefix(),
             enc_addr,
-        )?
+        )
+        .map_err(|_| "Error in decoding")?
         .ok_or("Failed to decode transparent address")?;
         Ok(GenericAddress::Transparent(to_address))
     }
@@ -132,7 +134,7 @@ pub fn generate_extended_spending_key_from_seed(val: JsValue) -> Result<JsValue,
     let extsk = sapling::spending_key(
         &data_arr.seed,
         data_arr.coin_type,
-        AccountId::from(data_arr.account_index),
+        AccountId::try_from(data_arr.account_index).map_err(|_| "Invalid account index")?,
     );
     let enc_extsk = encode_extsk(&extsk, data_arr.coin_type == 1);
     Ok(serde_wasm_bindgen::to_value(&enc_extsk)?)
@@ -154,7 +156,7 @@ pub fn generate_default_payment_address(
     let (def_index, def_address) = extfvk.to_diversifiable_full_viewing_key().default_address();
     Ok(serde_wasm_bindgen::to_value(&NewAddress {
         address: encode_payment_address_internal(&def_address, is_testnet),
-        diversifier_index: def_index.0.to_vec(),
+        diversifier_index: def_index.as_bytes().to_vec(),
     })?)
 }
 // Generate the n_address-th valid payment address given the encoded extended full viewing key and a starting index
@@ -166,11 +168,10 @@ pub fn generate_next_shielding_payment_address(
 ) -> Result<JsValue, JsValue> {
     let extfvk =
         decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
-    let mut diversifier_index = DiversifierIndex(
-        diversifier_index
-            .try_into()
-            .map_err(|_| "Invalid diversifier index")?,
-    );
+    let diversifier_index: [u8; 11] = diversifier_index
+        .try_into()
+        .map_err(|_| "Invalid diversifier index")?;
+    let mut diversifier_index = DiversifierIndex::from(diversifier_index);
     diversifier_index
         .increment()
         .map_err(|_| "No valid indeces left")?;
@@ -181,7 +182,7 @@ pub fn generate_next_shielding_payment_address(
 
     Ok(serde_wasm_bindgen::to_value(&NewAddress {
         address: encode_payment_address_internal(&address, is_testnet),
-        diversifier_index: new_index.0.to_vec(),
+        diversifier_index: new_index.as_bytes().to_vec(),
     })?)
 }
 
@@ -192,6 +193,7 @@ pub fn generate_extended_full_viewing_key(
     is_testnet: bool,
 ) -> Result<JsValue, JsValue> {
     let extsk = decode_extsk(&enc_extsk, is_testnet).map_err(|e| e.to_string())?;
+    #[allow(deprecated)]
     let extfvk = extsk.to_extended_full_viewing_key();
     let enc_extfvk = encode_extended_full_viewing_key(&extfvk, is_testnet);
     Ok(serde_wasm_bindgen::to_value(&enc_extfvk)?)

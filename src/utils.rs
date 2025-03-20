@@ -1,10 +1,10 @@
 use std::io::Cursor;
 
-use pivx_primitives::{
-    merkle_tree::{CommitmentTree, HashSer},
-    sapling::Node,
-};
-pub use wasm_bindgen::prelude::*;
+use pivx_primitives::merkle_tree::{read_commitment_tree, HashSer};
+use sapling::Node;
+use wasm_bindgen::prelude::*;
+
+use crate::transaction::DEPTH;
 
 pub fn set_panic_hook() {
     // When the `console_error_panic_hook` feature is enabled, we can call the
@@ -22,7 +22,9 @@ pub fn get_sapling_root(tree_hex: &str) -> Result<JsValue, JsValue> {
     let buff = Cursor::new(
         hex::decode(tree_hex).map_err(|_| "Cannot decode commitment tree from hexadecimal")?,
     );
-    let tree = CommitmentTree::<Node>::read(buff).map_err(|_| "Cannot decode commitment tree!")?;
+
+    let tree = read_commitment_tree::<Node, _, DEPTH>(buff)
+        .map_err(|_| "Cannot decode commitment tree!")?;
     let mut root = Vec::new();
     tree.root()
         .write(&mut root)
