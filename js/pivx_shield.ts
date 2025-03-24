@@ -126,6 +126,7 @@ export class PIVXShield {
     if (!PIVXShield.isInit) {
       PIVXShield.isInit = true;
       PIVXShield.shieldWorker.onmessage = (msg) => {
+        if (!msg.data.uuid) return;
         const promise = PIVXShield.promises.get(msg.data.uuid);
         if (!promise)
           throw new Error(
