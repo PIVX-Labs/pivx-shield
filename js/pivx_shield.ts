@@ -53,6 +53,33 @@ interface CreateTransactionReturnValue {
 }
 
 export class PIVXShield {
+  private static workerLoadPromise: Promise<void> = null;
+
+  private static async loadWorker() {
+    // If another function is awaiting the worker, wait with it
+    if (PIVXShield.workerLoadPromise) {
+      await PIVXShield.workerLoadPromise;
+      return;
+    }
+
+    // If there is already a worker, return
+    if (PIVXShield.shieldWorker) {
+      return;
+    }
+
+    PIVXShield.shieldWorker = new Worker(
+      new URL("worker_start.js", import.meta.url),
+    );
+    // Wait for the done message
+    PIVXShield.workerLoadPromise = new Promise<void>((res) => {
+      PIVXShield.shieldWorker.onmessage = (msg) => {
+        if (msg.data === "done") res();
+      };
+    });
+    await PIVXShield.workerLoadPromise;
+    PIVXShield.workerLoadPromise = null;
+  }
+
   /**
    * integer to keep track of the current Shield version.
    * v1: added mapNullifierNote
@@ -180,16 +207,7 @@ export class PIVXShield {
       throw new Error("Don't provide both a seed and an extendedSpendingKey");
     }
 
-    if (!PIVXShield.shieldWorker) {
-      PIVXShield.shieldWorker = new Worker(
-        new URL("worker_start.js", import.meta.url),
-      );
-      await new Promise<void>((res) => {
-        PIVXShield.shieldWorker.onmessage = (msg) => {
-          if (msg.data === "done") res();
-        };
-      });
-    }
+    await PIVXShield.loadWorker();
 
     const isTestnet = coinType === 1;
 
@@ -290,17 +308,7 @@ export class PIVXShield {
    */
   static async load(data: string) {
     const shieldData = JSON.parse(data);
-    if (!PIVXShield.shieldWorker) {
-      PIVXShield.shieldWorker = new Worker(
-        new URL("worker_start.js", import.meta.url),
-      );
-
-      await new Promise<void>((res) => {
-        PIVXShield.shieldWorker.onmessage = (msg) => {
-          if (msg.data === "done") res();
-        };
-      });
-    }
+    await PIVXShield.loadWorker();
     const currVersion = shieldData.version ?? 0;
     const pivxShield = new PIVXShield(
       undefined,
