@@ -268,6 +268,23 @@ export class PIVXShield {
   }
 
   /**
+   * Generate a spending key from the seed and load it using `PIVXShield::loadExtendedSpendingKey`
+   * @throws Error if the generated spending key doesn't match the stored viewing key
+   * or if a spending key is already loaded
+   */
+  async loadSeed(seed: Uint8Array, coinType: number, accountIndex: number) {
+    const extsk = await PIVXShield.callWorker<string>(
+      "generate_extended_spending_key_from_seed",
+      {
+        seed,
+        coin_type: coinType,
+        account_index: accountIndex,
+      },
+    );
+    return await this.loadExtendedSpendingKey(extsk);
+  }
+
+  /**
    * @returns a string that saves the public shield data.
    * The seed or extended spending key still needs to be provided
    * if spending authority is needed
