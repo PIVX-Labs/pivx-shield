@@ -425,12 +425,15 @@ pub async fn create_transaction_internal(
 
     let mut transparent_signing_set = TransparentSigningSet::new();
 
-    let (transparent_output_count, sapling_output_count) =
+    let (mut transparent_output_count, sapling_output_count) =
         if to_address.starts_with(network.hrp_sapling_payment_address()) {
             (0, 2)
         } else {
             (1, 2)
         };
+    if !change_address.starts_with(network.hrp_sapling_payment_address()) {
+        transparent_output_count += 1;
+    }
     let (nullifiers, change, fee) = match inputs {
         Either::Left(notes) => choose_notes(
             &mut builder,
