@@ -436,9 +436,10 @@ export class PIVXShield {
   async decryptTransactionOutputs(hex: string) {
     const decryptedNotes = await this.decryptTransaction(hex);
     const simplifiedNotes = [];
-    for (const { note } of decryptedNotes) {
+    for (const { note, memo } of decryptedNotes) {
       simplifiedNotes.push({
         value: note.value,
+        memo,
         recipient: await this.getShieldAddressFromNote(note),
       });
     }
@@ -675,6 +676,7 @@ export interface SpendableNote {
   note: Note;
   witness: string;
   nullifier: string;
+  memo: string;
 }
 
 export interface SimplifiedNote {
