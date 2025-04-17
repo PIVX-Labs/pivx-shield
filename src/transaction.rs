@@ -18,6 +18,7 @@ use pivx_primitives::merkle_tree::write_commitment_tree;
 use pivx_primitives::merkle_tree::write_incremental_witness;
 use pivx_primitives::transaction::builder::BuildConfig;
 use pivx_primitives::transaction::components::transparent::builder::TransparentSigningSet;
+use pivx_protocol::memo::Memo;
 use pivx_protocol::value::Zatoshis;
 use sapling::builder::ProverProgress;
 use sapling::Anchor;
@@ -44,6 +45,7 @@ use sapling::NullifierDerivingKey;
 use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
+use std::str::FromStr;
 #[cfg(feature = "multicore")]
 use std::sync::atomic::Ordering;
 use std::{collections::HashMap, error::Error, io::Cursor};
@@ -113,12 +115,14 @@ pub struct JSSpendableNote {
     note: Note,
     witness: String,
     nullifier: String,
+    memo: Option<String>,
 }
 
 pub struct SpendableNote {
     note: Note,
     witness: IncrementalWitness<Node, DEPTH>,
     nullifier: String,
+    memo: Option<String>,
 }
 impl SpendableNote {
     fn from_js_spendable_note(n: JSSpendableNote) -> Result<SpendableNote, Box<dyn Error>> {
@@ -127,6 +131,7 @@ impl SpendableNote {
             note: n.note,
             witness: read_incremental_witness(wit)?,
             nullifier: n.nullifier,
+            memo: n.memo,
         })
     }
     fn into_js_spendable_note(self) -> Result<JSSpendableNote, Box<dyn Error>> {
@@ -136,6 +141,7 @@ impl SpendableNote {
             note: self.note,
             witness: hex::encode(&buff),
             nullifier: self.nullifier,
+            memo: self.memo,
         })
     }
 }
@@ -268,10 +274,21 @@ pub fn handle_transaction(
                     // Save witness
                     let witness = IncrementalWitness::<Node, DEPTH>::from_tree(tree.clone());
                     let nullifier = get_nullifier_from_note_internal(&nullif_key, note, &witness)?;
+                    let memo = Memo::from_bytes(output.memo().as_slice())
+                        .and_then(|m| {
+                            if let Memo::Text(e) = m {
+                                Ok(e.to_string())
+                            } else {
+                                Ok(String::new())
+                            }
+                        })
+                        .ok();
+
                     new_witnesses.push(SpendableNote {
                         note: note.clone(),
                         witness,
                         nullifier,
+                        memo,
                     });
                     break;
                 }
@@ -337,6 +354,7 @@ pub struct JSTxOptions {
     amount: u64,
     block_height: u32,
     is_testnet: bool,
+    memo: String,
 }
 
 #[wasm_bindgen]
@@ -350,6 +368,7 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
         block_height,
         is_testnet,
         utxos,
+        memo,
     } = serde_wasm_bindgen::from_value::<JSTxOptions>(options)?;
     assert!(
         !(notes.is_some() && utxos.is_some()),
@@ -380,6 +399,7 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
         amount,
         BlockHeight::from_u32(block_height),
         network,
+        memo,
     )
     .await
     .map_err(|e| e.to_string())?;
@@ -398,6 +418,7 @@ pub async fn create_transaction_internal(
     mut amount: u64,
     block_height: BlockHeight,
     network: Network,
+    memo: String,
 ) -> Result<JSTransaction, Box<dyn Error>> {
     let anchor = if let Either::Left(ref notes) = inputs {
         match notes.first() {
@@ -458,7 +479,14 @@ pub async fn create_transaction_internal(
     match to_address {
         GenericAddress::Transparent(x) => builder.add_transparent_output(&x, amount).unwrap(),
         GenericAddress::Shield(x) => builder
-            .add_sapling_output::<FeeRule>(None, x, amount, MemoBytes::empty())
+            .add_sapling_output::<FeeRule>(
+                None,
+                x,
+                amount,
+                Memo::from_str(&memo)
+                    .and_then(|m| Ok(m.encode()))
+                    .unwrap_or(MemoBytes::empty()),
+            )
             .map_err(|_| "Failed to add output")?,
     }
 

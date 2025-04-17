@@ -44,6 +44,7 @@ interface Transaction {
   useShieldInputs: boolean;
   utxos: UTXO[];
   transparentChangeAddress: string;
+  memo: string;
 }
 
 interface CreateTransactionReturnValue {
@@ -435,9 +436,10 @@ export class PIVXShield {
   async decryptTransactionOutputs(hex: string) {
     const decryptedNotes = await this.decryptTransaction(hex);
     const simplifiedNotes = [];
-    for (const { note } of decryptedNotes) {
+    for (const { note, memo } of decryptedNotes) {
       simplifiedNotes.push({
         value: note.value,
+        memo,
         recipient: await this.getShieldAddressFromNote(note),
       });
     }
@@ -497,6 +499,7 @@ export class PIVXShield {
     useShieldInputs = true,
     utxos,
     transparentChangeAddress,
+    memo = "",
   }: Transaction) {
     if (!this.extsk) {
       throw new Error("You cannot create a transaction in view only mode!");
@@ -518,6 +521,7 @@ export class PIVXShield {
           amount,
           block_height: blockHeight,
           is_testnet: this.isTestnet,
+          memo,
         },
       );
 
@@ -672,6 +676,7 @@ export interface SpendableNote {
   note: Note;
   witness: string;
   nullifier: string;
+  memo: string;
 }
 
 export interface SimplifiedNote {
