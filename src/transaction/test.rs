@@ -115,7 +115,7 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
         5 * 10e6 as u64,
         BlockHeight::from_u32(317),
         Network::TestNetwork,
-	String::from("Test memo"),
+        String::from("Test memo"),
     )
     .await?;
 

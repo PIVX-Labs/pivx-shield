@@ -59,6 +59,7 @@ mod test {
         assert_eq!(get_checkpoint(3758400 + 1, false).0, 3758400);
         // Blocks in between two adjacent checkpoints should yield the smaller of the two
         assert_eq!(get_checkpoint((3758400 + 3715200) / 2, false).0, 3715200);
+        assert_eq!(get_checkpoint(4909949, false).0, 4909922);
         // First checkpoint should return an empty commitment tree
         let buff = Cursor::new(hex::decode(get_checkpoint(2700000, false).1)?);
         let tree: CommitmentTree<Node, DEPTH> = read_commitment_tree(buff)?;
