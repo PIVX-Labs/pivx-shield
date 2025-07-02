@@ -7,6 +7,7 @@ use incrementalmerkletree::frontier::CommitmentTree;
 use incrementalmerkletree::witness::IncrementalWitness;
 use pivx_client_backend::decrypt_transaction;
 use pivx_client_backend::keys::UnifiedFullViewingKey;
+use pivx_client_backend::TransferType;
 use pivx_primitives::consensus::Network;
 use pivx_primitives::consensus::NetworkConstants;
 use pivx_primitives::consensus::{BlockHeight, MAIN_NETWORK, TEST_NETWORK};
@@ -116,6 +117,8 @@ pub struct JSSpendableNote {
     witness: String,
     nullifier: String,
     memo: Option<String>,
+    // Whether or not this is an external or internal note
+    external: bool,
 }
 
 pub struct SpendableNote {
@@ -123,6 +126,7 @@ pub struct SpendableNote {
     witness: IncrementalWitness<Node, DEPTH>,
     nullifier: String,
     memo: Option<String>,
+    external: bool,
 }
 impl SpendableNote {
     fn from_js_spendable_note(n: JSSpendableNote) -> Result<SpendableNote, Box<dyn Error>> {
@@ -132,6 +136,7 @@ impl SpendableNote {
             witness: read_incremental_witness(wit)?,
             nullifier: n.nullifier,
             memo: n.memo,
+	    external: n.external,
         })
     }
     fn into_js_spendable_note(self) -> Result<JSSpendableNote, Box<dyn Error>> {
@@ -142,6 +147,7 @@ impl SpendableNote {
             witness: hex::encode(&buff),
             nullifier: self.nullifier,
             memo: self.memo,
+	    external: self.external,
         })
     }
 }
@@ -241,16 +247,13 @@ pub fn handle_transaction(
         pivx_primitives::consensus::BranchId::Sapling,
     )?;
     let mut hash = HashMap::new();
-    let nullif_key = key
-        .sapling()
-        .ok_or("Cannot generate nullifier key")?
-        .to_nk(Scope::External);
-    hash.insert(AccountId::default(), key);
+    hash.insert(AccountId::default(), key.clone());
     let decrypted_tx = if is_testnet {
         decrypt_transaction(&TEST_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
     } else {
         decrypt_transaction(&MAIN_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
     };
+    
     let mut nullifiers: Vec<Nullifier> = vec![];
     if let Some(sapling) = tx.sapling_bundle() {
         for x in sapling.shielded_spends() {
@@ -271,8 +274,19 @@ pub fn handle_transaction(
             for output in decrypted_tx.sapling_outputs() {
                 let (note, index) = (output.note(), output.index());
                 if index == i {
+		    let external = match output.transfer_type() {
+			TransferType::WalletInternal => false,
+			_ => true,
+		    };
                     // Save witness
                     let witness = IncrementalWitness::<Node, DEPTH>::from_tree(tree.clone());
+		    let nullif_key = key.sapling().ok_or("Cannot generate nullifier key")?.to_nk(
+			if external {
+			    Scope::External
+			} else {
+			    Scope::Internal
+			}
+		    );
                     let nullifier = get_nullifier_from_note_internal(&nullif_key, note, &witness)?;
                     let memo = Memo::from_bytes(output.memo().as_slice())
                         .and_then(|m| {
@@ -289,6 +303,7 @@ pub fn handle_transaction(
                         witness,
                         nullifier,
                         memo,
+			external,
                     });
                     break;
                 }
@@ -296,27 +311,6 @@ pub fn handle_transaction(
         }
     }
     Ok(nullifiers)
-}
-
-#[wasm_bindgen]
-pub fn get_nullifier_from_note(
-    note_data: JsValue,
-    enc_extfvk: String,
-    is_testnet: bool,
-) -> Result<JsValue, JsValue> {
-    let extfvk =
-        decode_extended_full_viewing_key(&enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
-    let (note, hex_witness): (Note, String) = serde_wasm_bindgen::from_value(note_data)?;
-    let witness = Cursor::new(hex::decode(hex_witness).map_err(|e| e.to_string())?);
-
-    let witness =
-        read_incremental_witness(witness).map_err(|_| "Cannot read witness from buffer")?;
-    let nullif_key = extfvk
-        .to_diversifiable_full_viewing_key()
-        .to_nk(Scope::External);
-    let ser_nullifiers = get_nullifier_from_note_internal(&nullif_key, &note, &witness)
-        .map_err(|e| e.to_string())?;
-    Ok(serde_wasm_bindgen::to_value(&ser_nullifiers)?)
 }
 
 pub fn get_nullifier_from_note_internal(
@@ -381,9 +375,9 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
         Network::MainNetwork
     };
     let input = if let Some(notes) = notes {
-        let mut notes: Vec<(Note, String)> =
-            notes.into_iter().map(|n| (n.note, n.witness)).collect();
-        notes.sort_by_key(|(note, _)| note.value().inner());
+        let mut notes: Vec<(Note, String, bool)> =
+            notes.into_iter().map(|n| (n.note, n.witness, n.external)).collect();
+        notes.sort_by_key(|(note, _, _)| note.value().inner());
         Either::Left(notes)
     } else if let Some(mut utxos) = utxos {
         utxos.sort_by_key(|u| u.amount);
@@ -411,7 +405,7 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
 /// The notes are used in the order they're provided
 /// It might be useful to sort them first, or use any other smart alogorithm
 pub async fn create_transaction_internal(
-    inputs: Either<Vec<(Note, String)>, Vec<Utxo>>,
+    inputs: Either<Vec<(Note, String, bool)>, Vec<Utxo>>,
     extsk: &ExtendedSpendingKey,
     to_address: &str,
     change_address: &str,
@@ -422,7 +416,7 @@ pub async fn create_transaction_internal(
 ) -> Result<JSTransaction, Box<dyn Error>> {
     let anchor = if let Either::Left(ref notes) = inputs {
         match notes.first() {
-            Some((_, witness)) => {
+            Some((_, witness, _)) => {
                 let witness = Cursor::new(hex::decode(witness)?);
 
                 let witness = read_incremental_witness::<Node, _, DEPTH>(witness)?;
@@ -613,7 +607,7 @@ fn choose_utxos(
 
 fn choose_notes(
     builder: &mut Builder<Network, impl ProverProgress>,
-    notes: &[(Note, String)],
+    notes: &[(Note, String, bool)],
     extsk: &ExtendedSpendingKey,
     amount: &mut u64,
     transparent_output_count: u64,
@@ -623,7 +617,7 @@ fn choose_notes(
     let mut nullifiers = vec![];
     let mut sapling_input_count = 0;
     let mut fee = 0;
-    for (note, witness) in notes {
+    for (note, witness, external) in notes {
         let witness = Cursor::new(hex::decode(witness)?);
 
         let witness = read_incremental_witness::<Node, _, DEPTH>(witness)?;
@@ -637,7 +631,25 @@ fn choose_notes(
         let nullifier = note.nf(
             &extsk
                 .to_diversifiable_full_viewing_key()
-                .to_nk(Scope::External),
+                .to_nk(
+		    if *external {
+			Scope::External
+		    } else {
+			Scope::Internal
+		    }
+		),
+            witness.witnessed_position().into(),
+        );
+	let nullifier2 = note.nf(
+            &extsk
+                .to_diversifiable_full_viewing_key()
+                .to_nk(
+		    if !*external {
+			Scope::External
+		    } else {
+			Scope::Internal
+		    }
+		),
             witness.witnessed_position().into(),
         );
         nullifiers.push(hex::encode(nullifier.to_vec()));
