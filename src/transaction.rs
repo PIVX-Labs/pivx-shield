@@ -1,6 +1,5 @@
 use crate::keys::decode_extended_full_viewing_key;
 use crate::keys::decode_extsk;
-use crate::keys::encode_payment_address;
 use crate::prover::get_prover;
 use crate::prover::ImplTxProver;
 use incrementalmerkletree::frontier::CommitmentTree;
@@ -275,11 +274,11 @@ pub fn handle_transaction(
                     let witness = IncrementalWitness::<Node, DEPTH>::from_tree(tree.clone());
                     let nullifier = get_nullifier_from_note_internal(&nullif_key, note, &witness)?;
                     let memo = Memo::from_bytes(output.memo().as_slice())
-                        .and_then(|m| {
+                        .map(|m| {
                             if let Memo::Text(e) = m {
-                                Ok(e.to_string())
+                                e.to_string()
                             } else {
-                                Ok(String::new())
+                                String::new()
                             }
                         })
                         .ok();
@@ -391,35 +390,49 @@ pub async fn create_transaction(options: JsValue) -> Result<JsValue, JsValue> {
     } else {
         panic!("No input provided")
     };
-    let result = create_transaction_internal(
-        input,
-        &extsk,
-        &to_address,
-        &change_address,
+    let result = create_transaction_internal(TxInternalArgs {
+        inputs: input,
+        extsk: &extsk,
+        to_address: &to_address,
+        change_address: &change_address,
         amount,
-        BlockHeight::from_u32(block_height),
+        block_height: BlockHeight::from_u32(block_height),
         network,
         memo,
-    )
+    })
     .await
     .map_err(|e| e.to_string())?;
 
     Ok(serde_wasm_bindgen::to_value(&result)?)
 }
 
-/// Create a transaction.
-/// The notes are used in the order they're provided
-/// It might be useful to sort them first, or use any other smart alogorithm
-pub async fn create_transaction_internal(
+struct TxInternalArgs<'a> {
     inputs: Either<Vec<(Note, String)>, Vec<Utxo>>,
-    extsk: &ExtendedSpendingKey,
-    to_address: &str,
-    change_address: &str,
-    mut amount: u64,
+    extsk: &'a ExtendedSpendingKey,
+    to_address: &'a str,
+    change_address: &'a str,
+    amount: u64,
     block_height: BlockHeight,
     network: Network,
     memo: String,
+}
+
+/// Create a transaction.
+/// The notes are used in the order they're provided
+/// It might be useful to sort them first, or use any other smart alogorithm
+async fn create_transaction_internal(
+    args: TxInternalArgs<'_>,
 ) -> Result<JSTransaction, Box<dyn Error>> {
+    let TxInternalArgs {
+        inputs,
+        extsk,
+        to_address,
+        change_address,
+        mut amount,
+        block_height,
+        network,
+        memo,
+    } = args;
     let anchor = if let Either::Left(ref notes) = inputs {
         match notes.first() {
             Some((_, witness)) => {
@@ -484,7 +497,7 @@ pub async fn create_transaction_internal(
                 x,
                 amount,
                 Memo::from_str(&memo)
-                    .and_then(|m| Ok(m.encode()))
+                    .map(|m| m.encode())
                     .unwrap_or(MemoBytes::empty()),
             )
             .map_err(|_| "Failed to add output")?,
@@ -539,7 +552,7 @@ pub async fn create_transaction_internal(
                 .unwrap_or_else(|_| panic!("Cannot transmit tx"));
         });
         let (_, res) = join!(tx_progress_future, receiver.recv());
-        return Ok(res.ok_or("Fail to receive tx proof")?);
+        Ok(res.ok_or("Fail to receive tx proof")?)
     }
     #[cfg(not(feature = "multicore"))]
     prove_transaction(
