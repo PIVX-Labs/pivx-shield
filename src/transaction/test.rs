@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use crate::transaction::{
-    create_transaction_internal, get_nullifier_from_note_internal, SpendableNote,
+    create_transaction_internal, get_nullifier_from_note_internal, SpendableNote, TxInternalArgs,
 };
 use pivx_primitives::merkle_tree::read_commitment_tree;
 use pivx_primitives::merkle_tree::write_incremental_witness;
@@ -107,16 +107,16 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
     let mut witness_vec = vec![];
     write_incremental_witness(witness, &mut witness_vec)?;
     let path = hex::encode(witness_vec);
-    let tx = create_transaction_internal(
-        Either::Left(vec![(note.clone(), path)]),
-        &extended_spending_key,
-        output,
-        address,
-        5 * 10e6 as u64,
-        BlockHeight::from_u32(317),
-        Network::TestNetwork,
-        String::from("Test memo"),
-    )
+    let tx = create_transaction_internal(TxInternalArgs {
+        inputs: Either::Left(vec![(note.clone(), path)]),
+        extsk: &extended_spending_key,
+        to_address: output,
+        change_address: address,
+        amount: 5 * 10e6 as u64,
+        block_height: BlockHeight::from_u32(317),
+        network: Network::TestNetwork,
+        memo: String::from("Test memo"),
+    })
     .await?;
 
     assert_eq!(tx.nullifiers.len(), 1);
