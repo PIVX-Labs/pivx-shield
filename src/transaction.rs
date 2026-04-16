@@ -4,6 +4,7 @@ use crate::prover::get_prover;
 use crate::prover::ImplTxProver;
 use incrementalmerkletree::frontier::CommitmentTree;
 use incrementalmerkletree::witness::IncrementalWitness;
+use pivx_client_backend::data_api::DecryptedTransaction;
 use pivx_client_backend::decrypt_transaction;
 use pivx_client_backend::keys::UnifiedFullViewingKey;
 use pivx_primitives::consensus::Network;
@@ -40,6 +41,8 @@ use zcash_transparent::bundle::{OutPoint, TxOut};
 
 #[cfg(feature = "multicore")]
 use pivx_primitives::transaction::builder::Progress;
+#[cfg(feature = "multicore")]
+use rayon::prelude::*;
 use sapling::NullifierDerivingKey;
 use secp256k1::SecretKey;
 use serde::{Deserialize, Serialize};
@@ -55,6 +58,20 @@ mod test;
 
 #[cfg(feature = "multicore")]
 static TX_PROGRESS_LOCK: AtomicF32 = AtomicF32::new(0.0);
+
+#[cfg(feature = "multicore")]
+macro_rules! maybe_iter {
+    ($v:expr) => {
+        $v.par_iter()
+    };
+}
+
+#[cfg(not(feature = "multicore"))]
+macro_rules! maybe_iter {
+    ($v:expr) => {
+        $v.iter()
+    };
+}
 
 pub const DEPTH: u8 = 32;
 
@@ -170,36 +187,65 @@ pub fn handle_blocks(
         .map(|n| SpendableNote::from_js_spendable_note(n))
         .collect::<Result<Vec<SpendableNote>, _>>()
         .map_err(|e| e.to_string())?;
+    let txs = blocks.into_iter().flat_map(|b| b.txs).collect::<Vec<_>>();
+
+    let mut hash = HashMap::new();
+    let nullif_key = key
+        .sapling()
+        .ok_or("Cannot generate nullifier key")?
+        .to_nk(Scope::External);
+    hash.insert(AccountId::default(), key.clone());
+    let txs = txs
+        .iter()
+        .map(|tx| {
+            (
+                tx,
+                Transaction::read(
+                    Cursor::new(hex::decode(tx).map_err(|_| "Tx hex is invalid").unwrap()),
+                    pivx_primitives::consensus::BranchId::Sapling,
+                )
+                .map_err(|_| "Couldn't parse tx")
+                .unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let decrypted_txs = maybe_iter!(txs)
+        .map(|(_, tx)| {
+            if is_testnet {
+                decrypt_transaction(&TEST_NETWORK, BlockHeight::from_u32(320), tx, &hash)
+            } else {
+                decrypt_transaction(&MAIN_NETWORK, BlockHeight::from_u32(320), tx, &hash)
+            }
+        })
+        .collect::<Vec<_>>();
     let mut nullifiers = vec![];
     let mut new_notes = vec![];
     let mut wallet_transactions = vec![];
-    for block in blocks {
-        for tx in block.txs {
-            let old_note_length = new_notes.len();
-            let tx_nullifiers = handle_transaction(
-                &mut tree,
-                &tx,
-                key.clone(),
-                is_testnet,
-                &mut comp_note,
-                &mut new_notes,
-            )
-            .map_err(|_| "Couldn't handle transaction")?
-            .into_iter()
-            .map(|n| hex::encode(n.0))
-            .collect::<Vec<_>>();
-            let mut is_wallet_tx = old_note_length != new_notes.len();
-            for n in comp_note.iter().chain(new_notes.iter()) {
-                if is_wallet_tx || tx_nullifiers.contains(&n.nullifier) {
-                    is_wallet_tx = true;
-                    break;
-                }
+    for (&(hex, ref tx), decrypted_tx) in txs.iter().zip(decrypted_txs) {
+        let old_note_length = new_notes.len();
+        let tx_nullifiers = handle_transaction(
+            &mut tree,
+            tx,
+            &decrypted_tx,
+            &nullif_key,
+            &mut comp_note,
+            &mut new_notes,
+        )
+        .map_err(|_| "Couldn't handle transaction")?
+        .into_iter()
+        .map(|n| hex::encode(n.0))
+        .collect::<Vec<_>>();
+        let mut is_wallet_tx = old_note_length != new_notes.len();
+        for n in comp_note.iter().chain(new_notes.iter()) {
+            if is_wallet_tx || tx_nullifiers.contains(&n.nullifier) {
+                is_wallet_tx = true;
+                break;
             }
-            if is_wallet_tx {
-                wallet_transactions.push(tx);
-            }
-            nullifiers.extend(tx_nullifiers);
         }
+        if is_wallet_tx {
+            wallet_transactions.push(hex.to_string());
+        }
+        nullifiers.extend(tx_nullifiers);
     }
 
     let ser_comp_note = serialize_comp_note(comp_note).map_err(|_| "couldn't decrypt notes")?;
@@ -229,27 +275,12 @@ pub fn serialize_comp_note(
 //add a tx to a given commitment tree and the return a witness to each output
 pub fn handle_transaction(
     tree: &mut CommitmentTree<Node, DEPTH>,
-    tx: &str,
-    key: UnifiedFullViewingKey,
-    is_testnet: bool,
+    tx: &Transaction,
+    decrypted_tx: &DecryptedTransaction<'_, AccountId>,
+    nullif_key: &NullifierDerivingKey,
     witnesses: &mut [SpendableNote],
     new_witnesses: &mut Vec<SpendableNote>,
 ) -> Result<Vec<Nullifier>, Box<dyn Error>> {
-    let tx = Transaction::read(
-        Cursor::new(hex::decode(tx)?),
-        pivx_primitives::consensus::BranchId::Sapling,
-    )?;
-    let mut hash = HashMap::new();
-    let nullif_key = key
-        .sapling()
-        .ok_or("Cannot generate nullifier key")?
-        .to_nk(Scope::External);
-    hash.insert(AccountId::default(), key);
-    let decrypted_tx = if is_testnet {
-        decrypt_transaction(&TEST_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
-    } else {
-        decrypt_transaction(&MAIN_NETWORK, BlockHeight::from_u32(320), &tx, &hash)
-    };
     let mut nullifiers: Vec<Nullifier> = vec![];
     if let Some(sapling) = tx.sapling_bundle() {
         for x in sapling.shielded_spends() {
@@ -272,7 +303,7 @@ pub fn handle_transaction(
                 if index == i {
                     // Save witness
                     let witness = IncrementalWitness::<Node, DEPTH>::from_tree(tree.clone());
-                    let nullifier = get_nullifier_from_note_internal(&nullif_key, note, &witness)?;
+                    let nullifier = get_nullifier_from_note_internal(nullif_key, note, &witness)?;
                     let memo = Memo::from_bytes(output.memo().as_slice())
                         .map(|m| {
                             if let Memo::Text(e) = m {
