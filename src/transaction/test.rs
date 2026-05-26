@@ -40,10 +40,7 @@ fn check_tx_decryption() {
         skey.to_extended_full_viewing_key(),
     )
     .expect("Failed to create key");
-    let nullif_key = key
-        .sapling()
-        .unwrap()
-        .to_nk(Scope::External);
+    let nullif_key = key.sapling().unwrap().to_nk(Scope::External);
     let mut new_comp_note = vec![];
     let mut hash = HashMap::new();
     hash.insert(AccountId::default(), key.clone());
@@ -116,10 +113,7 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
 
     let mut new_notes = vec![];
 
-    let nullif_key = key
-        .sapling()
-        .unwrap()
-        .to_nk(Scope::External);
+    let nullif_key = key.sapling().unwrap().to_nk(Scope::External);
     let mut hash = HashMap::new();
     hash.insert(AccountId::default(), key.clone());
     let tx = Transaction::read(
@@ -132,7 +126,7 @@ pub async fn test_create_transaction() -> Result<(), Box<dyn Error>> {
     let _nullifiers = handle_transaction(
         &mut commitment_tree,
         &tx,
-	&decrypted_tx,
+        &decrypted_tx,
         &nullif_key,
         &mut vec![],
         &mut new_notes,
