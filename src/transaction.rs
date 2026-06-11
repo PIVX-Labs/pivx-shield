@@ -36,7 +36,12 @@ use pivx_primitives::zip32::AccountId;
 use pivx_primitives::zip32::Scope;
 use rand_core::OsRng;
 use sapling::zip32::ExtendedSpendingKey;
+use sapling::note::ExtractedNoteCommitment;
+use sapling::note_encryption::{
+    try_sapling_note_decryption, PreparedIncomingViewingKey, Zip212Enforcement,
+};
 use sapling::{note::Note, Node, Nullifier};
+use zcash_note_encryption::{EphemeralKeyBytes, ShieldedOutput, ENC_CIPHERTEXT_SIZE};
 use zcash_transparent::bundle::{OutPoint, TxOut};
 
 #[cfg(feature = "multicore")]
@@ -124,6 +129,57 @@ pub struct JSTxSaplingData {
 #[derive(Serialize, Deserialize)]
 pub struct Block {
     txs: Vec<String>,
+}
+
+/// A block from the bridge's compact (0x04) stream. Carries pre-extracted
+/// output fields instead of full raw transactions, so we never run
+/// `Transaction::read` on the sync path.
+#[derive(Serialize, Deserialize)]
+pub struct CompactBlock {
+    txs: Vec<CompactTxData>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CompactTxData {
+    nullifiers: Vec<String>,
+    outputs: Vec<CompactOutputData>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CompactOutputData {
+    // Raw bytes (passed as JS Uint8Array via serde_bytes) rather than hex —
+    // avoids a hex encode on the JS side and a hex decode here for every
+    // output's 580-byte ciphertext.
+    #[serde(with = "serde_bytes")]
+    cmu: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    epk: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    enc_ciphertext: Vec<u8>,
+}
+
+/// Adapts a compact output to the `ShieldedOutput` trait so it can be fed to
+/// `try_sapling_note_decryption` without a full transaction.
+struct CompactOutputRef {
+    epk: EphemeralKeyBytes,
+    cmu: [u8; 32],
+    enc_ciphertext: [u8; ENC_CIPHERTEXT_SIZE],
+}
+
+impl ShieldedOutput<sapling::note_encryption::SaplingDomain, ENC_CIPHERTEXT_SIZE>
+    for CompactOutputRef
+{
+    fn ephemeral_key(&self) -> EphemeralKeyBytes {
+        self.epk.clone()
+    }
+
+    fn cmstar_bytes(&self) -> [u8; 32] {
+        self.cmu
+    }
+
+    fn enc_ciphertext(&self) -> &[u8; ENC_CIPHERTEXT_SIZE] {
+        &self.enc_ciphertext
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -270,6 +326,165 @@ pub fn serialize_comp_note(
         .into_iter()
         .map(|n| SpendableNote::into_js_spendable_note(n))
         .collect()
+}
+
+/// Process blocks from the bridge's compact (0x04) stream. Decrypts notes
+/// directly from pre-extracted output fields, bypassing `Transaction::read`.
+/// Trial decryption runs in parallel (under `multicore`) via `maybe_iter!`;
+/// the commitment-tree and witness appends stay sequential and in stream order,
+/// so the resulting tree is byte-identical to the canonical `handle_blocks`.
+#[wasm_bindgen]
+pub fn handle_blocks_compact(
+    tree_hex: &str,
+    compact_blocks: JsValue,
+    enc_extfvk: &str,
+    is_testnet: bool,
+    comp_notes: JsValue,
+) -> Result<JsValue, JsValue> {
+    let blocks: Vec<CompactBlock> = serde_wasm_bindgen::from_value(compact_blocks)?;
+    let mut tree = read_commitment_tree(tree_hex).map_err(|_| "Couldn't read commitment tree")?;
+    let comp_note: Vec<JSSpendableNote> = serde_wasm_bindgen::from_value(comp_notes)?;
+    let extfvk =
+        decode_extended_full_viewing_key(enc_extfvk, is_testnet).map_err(|e| e.to_string())?;
+    let ivk =
+        PreparedIncomingViewingKey::new(&extfvk.to_diversifiable_full_viewing_key().fvk().vk.ivk());
+    let nullif_key = extfvk
+        .to_diversifiable_full_viewing_key()
+        .to_nk(Scope::External);
+    let mut existing_notes = comp_note
+        .into_iter()
+        .map(|n| SpendableNote::from_js_spendable_note(n))
+        .collect::<Result<Vec<SpendableNote>, _>>()
+        .map_err(|e| e.to_string())?;
+    let mut nullifiers = vec![];
+    let mut new_notes = vec![];
+
+    // Spend nullifiers in stream order (block → tx). These are compared as
+    // strings by removeSpentNotes() against note nullifiers derived via
+    // `hex::encode` (lowercase), so canonicalize to lowercase here — the input
+    // is lowercase today, but this makes the spent-note match independent of any
+    // future change in how the bridge/JS encodes the nullifier hex.
+    for block in &blocks {
+        for tx in &block.txs {
+            for nf_hex in &tx.nullifiers {
+                nullifiers.push(nf_hex.to_lowercase());
+            }
+        }
+    }
+
+    // Flatten every output and trial-decrypt in parallel. `collect()` preserves
+    // input order, which the sequential tree pass below depends on. (A batched
+    // decryption variant was tried — batch::try_note_decryption with shared EC
+    // precompute — but it regressed ~14.7s→16.6s: the per-output path is already
+    // well-optimized and the batch overhead/clone cost outweighed its benefit.)
+    let all_outputs: Vec<&CompactOutputData> = blocks
+        .iter()
+        .flat_map(|b| b.txs.iter())
+        .flat_map(|t| t.outputs.iter())
+        .collect();
+
+    let prepared = maybe_iter!(all_outputs)
+        .map(|&o| prepare_compact_output(o, &ivk))
+        .collect::<Result<Vec<_>, String>>()
+        .map_err(|e| JsValue::from_str(&e))?;
+
+    // Sequential: append each commitment to the tree and all tracked witnesses,
+    // snapshotting a witness for outputs that decrypted to our notes.
+    for prep in &prepared {
+        tree.append(prep.node)
+            .map_err(|_| "Failed to add cmu to tree")?;
+        for note in existing_notes.iter_mut().chain(new_notes.iter_mut()) {
+            note.witness
+                .append(prep.node)
+                .map_err(|_| "Failed to add cmu to witness")?;
+        }
+        if let Some((note, memo)) = &prep.decrypted {
+            let witness = IncrementalWitness::<Node, DEPTH>::from_tree(tree.clone());
+            let nullifier = get_nullifier_from_note_internal(&nullif_key, note, &witness)
+                .map_err(|e| e.to_string())?;
+            new_notes.push(SpendableNote {
+                note: note.clone(),
+                witness,
+                nullifier,
+                memo: memo.clone(),
+            });
+        }
+    }
+
+    let ser_comp_note =
+        serialize_comp_note(existing_notes).map_err(|_| "couldn't serialize notes")?;
+    let ser_new_comp_note =
+        serialize_comp_note(new_notes).map_err(|_| "couldn't serialize notes")?;
+
+    let mut buff = Vec::new();
+    write_commitment_tree(&tree, &mut buff).map_err(|_| "Cannot write tree to buffer")?;
+
+    Ok(serde_wasm_bindgen::to_value(&JSTxSaplingData {
+        decrypted_notes: ser_comp_note,
+        nullifiers,
+        commitment_tree: hex::encode(buff),
+        wallet_transactions: vec![],
+        decrypted_new_notes: ser_new_comp_note,
+    })?)
+}
+
+/// A compact output after decoding + trial decryption — the parallelizable work.
+struct PreparedCompactOutput {
+    node: Node,
+    decrypted: Option<(Note, Option<String>)>,
+}
+
+/// Decode one compact output and attempt note decryption with our IVK. Pure and
+/// `Send`-safe (returns `String` errors, not `Box<dyn Error>`) so results can be
+/// collected from rayon workers.
+fn prepare_compact_output(
+    output_data: &CompactOutputData,
+    ivk: &PreparedIncomingViewingKey,
+) -> Result<PreparedCompactOutput, String> {
+    let cmu_bytes: [u8; 32] = output_data
+        .cmu
+        .as_slice()
+        .try_into()
+        .map_err(|_| "invalid cmu length".to_string())?;
+    let epk_bytes: [u8; 32] = output_data
+        .epk
+        .as_slice()
+        .try_into()
+        .map_err(|_| "invalid epk length".to_string())?;
+    let enc_bytes: [u8; ENC_CIPHERTEXT_SIZE] = output_data
+        .enc_ciphertext
+        .as_slice()
+        .try_into()
+        .map_err(|_| "invalid enc_ciphertext length".to_string())?;
+
+    let cmu = ExtractedNoteCommitment::from_bytes(&cmu_bytes)
+        .into_option()
+        .ok_or_else(|| "invalid cmu".to_string())?;
+    let node = Node::from_cmu(&cmu);
+
+    let compact_ref = CompactOutputRef {
+        epk: EphemeralKeyBytes(epk_bytes),
+        cmu: cmu_bytes,
+        enc_ciphertext: enc_bytes,
+    };
+
+    // PIVX uses Zip212Enforcement::Off (pre-Zip212 note encoding)
+    let decrypted = try_sapling_note_decryption(ivk, &compact_ref, Zip212Enforcement::Off).map(
+        |(note, _addr, memo_bytes)| {
+            let memo = Memo::from_bytes(memo_bytes.as_slice())
+                .map(|m| {
+                    if let Memo::Text(e) = m {
+                        e.to_string()
+                    } else {
+                        String::new()
+                    }
+                })
+                .ok();
+            (note, memo)
+        },
+    );
+
+    Ok(PreparedCompactOutput { node, decrypted })
 }
 
 //add a tx to a given commitment tree and the return a witness to each output
