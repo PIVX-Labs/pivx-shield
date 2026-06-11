@@ -1,6 +1,6 @@
 [package]
 name = "pivx-shield-rust"
-version = "1.3.0"
+version = "1.4.0"
 authors = ["Duddino <duddino@duddino.com>", "Alessandro Rezzi <alessandrorezzi2000@gmail.com>"]
 edition = "2021"
 description = "WASM library for interoperation with the PIVX Shield sapling protocol."
@@ -46,6 +46,8 @@ either = "1.13.0"
 wasm-bindgen-rayon = { version = "1.2.1", optional = true }
 rand_core = "0.6.4"
 atomic_float = "1.1.0"
+zcash_note_encryption = "0.4"
+serde_bytes = "0.11"
 bellman = {git="https://github.com/Duddino/librustpivx", branch="librustzcash-rebase", features = ["groth16"]}
 
 [dev-dependencies]
