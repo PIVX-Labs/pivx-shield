@@ -25,6 +25,29 @@ interface RustBlock {
   txs: string[];
 }
 
+/**
+ * A block from the bridge's compact (0x04) stream. Carries pre-extracted output
+ * fields rather than full transaction hex, so the worker never runs
+ * `Transaction::read`.
+ */
+export interface CompactBlock {
+  txs: CompactTxData[];
+  height: number;
+}
+
+export interface CompactTxData {
+  nullifiers: string[];
+  outputs: CompactOutputData[];
+}
+
+export interface CompactOutputData {
+  // Raw bytes (Uint8Array) — passed to the worker as-is, avoiding a hex
+  // encode/decode round-trip for every output's ciphertext.
+  cmu: Uint8Array;
+  epk: Uint8Array;
+  enc_ciphertext: Uint8Array;
+}
+
 interface TransactionResult {
   decrypted_notes: SpendableNote[];
   decrypted_new_notes: SpendableNote[];
@@ -401,6 +424,52 @@ export class PIVXShield {
     this.lastProcessedBlock = blocks[blocks.length - 1].height;
 
     return wallet_transactions;
+  }
+
+  /**
+   * Process blocks from the bridge's compact (0x04) stream. Decrypts notes
+   * directly from pre-extracted output fields, bypassing `Transaction::read`.
+   * Unlike {@link handleBlocks} there is no full tx hex, so no per-txid pending
+   * cleanup and no `wallet_transactions` are returned — balance, notes and
+   * nullifiers are computed identically to the canonical path.
+   */
+  async handleBlocksCompact(blocks: CompactBlock[]) {
+    if (blocks.length === 0) return;
+    if (
+      !blocks.every((block, i) => {
+        if (i === 0) {
+          return block.height > this.lastProcessedBlock;
+        } else {
+          return block.height > blocks[i - 1].height;
+        }
+      })
+    ) {
+      throw new Error(
+        "Blocks must be provided in monotonically increasing order",
+      );
+    }
+
+    const { decrypted_notes, decrypted_new_notes, nullifiers, commitment_tree } =
+      await PIVXShield.callWorker<TransactionResult>(
+        "handle_blocks_compact",
+        this.commitmentTree,
+        blocks.map((block) => ({ txs: block.txs })),
+        this.extfvk,
+        this.isTestnet,
+        this.unspentNotes,
+      );
+    this.commitmentTree = commitment_tree;
+    this.unspentNotes = [...decrypted_notes, ...decrypted_new_notes];
+    for (const { note, nullifier } of decrypted_new_notes) {
+      const simplifiedNote = {
+        value: note.value,
+        recipient: await this.getShieldAddressFromNote(note),
+      };
+
+      this.mapNullifierNote.set(nullifier, simplifiedNote);
+    }
+    await this.removeSpentNotes(nullifiers);
+    this.lastProcessedBlock = blocks[blocks.length - 1].height;
   }
 
   /**
